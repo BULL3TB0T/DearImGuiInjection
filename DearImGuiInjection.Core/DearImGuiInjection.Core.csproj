@@ -1,0 +1,71 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <LangVersion>preview</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP</Configurations>
+    <Platforms>AnyCPU;x86;x64</Platforms>
+
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json
+    </RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Reloaded.Hooks" Version="4.3.3" />
+    <PackageReference Include="SharpDX" Version="4.2.0" />
+    <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
+    <PackageReference Include="SharpDX.Direct2D1" Version="4.2.0" />
+    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+    <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
+    <PackageReference Include="Hexa.NET.ImGui" Version="2.2.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackFiles Include="$(TargetDir)*.dll" Exclude="@(PackExclude->'$(TargetDir)%(Identity)*')" />
+    <AssetFiles Include="$(MSBuildProjectDirectory)\$(AssetsFolderName)\**\*.*" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Platform)'=='x86' Or '$(Platform)'=='AnyCPU'">
+    <CimguiFiles Include="$(CimguiDir)cimgui-x86.dll" />
+    <FasmFiles Include="$(FasmDir)FASM.DLL" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Platform)'=='x64' Or '$(Platform)'=='AnyCPU'">
+    <CimguiFiles Include="$(CimguiDir)cimgui-x64.dll" />
+    <FasmFiles Include="$(FasmDir)FASMX64.DLL" />
+  </ItemGroup>
+
+  <Target Name="PackFilesToDirectory" AfterTargets="Build" Condition="'$(Configuration)'!='Debug' And '$(TargetFramework)'!=''">
+    <MakeDir Directories="$(PackDir)" Condition="!Exists('$(PackDir)')" />
+    <Copy SourceFiles="@(PackFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(CimguiFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" 
+          Condition="'$(Platform)'=='AnyCPU'" />
+    <Copy SourceFiles="@(CimguiFiles)" DestinationFiles="@(CimguiFiles->'$(PackDir)cimgui.dll')" SkipUnchangedFiles="true"
+          Condition="'$(Platform)'!='AnyCPU'" />
+    <Copy SourceFiles="@(FasmFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(AssetFiles)" 
+          DestinationFiles="@(AssetFiles->'$(PackDir)$(AssetsFolderName)\%(RecursiveDir)%(Filename)%(Extension)')" 
+          SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CleanPackedFiles" AfterTargets="Clean" 
+          Condition="'$(Configuration)'!='Debug' And Exists('$(PackDir)') And '$(TargetFramework)'!=''">
+    <RemoveDir Directories="$(PackDir)" />
+  </Target>
+  <Target Name="StartSteamGameAfterPacking" AfterTargets="AfterBuild" 
+          Condition="'$(Configuration)'!='Debug' And '$(StartSteamGameAfterBuild)'=='true' And '$(TargetFramework)'!=''">
+    <Message Importance="High" Text="Launching Steam game AppID=$(SteamAppId)..." />
+    <Exec Command='cmd /c start "" "steam://rungameid/$(SteamAppId)"' />
+  </Target>
+
+</Project>

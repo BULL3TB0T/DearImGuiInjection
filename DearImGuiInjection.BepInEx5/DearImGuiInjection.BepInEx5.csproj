@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<LangVersion>preview</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+
+    <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP</Configurations>
+    <Platforms>AnyCPU;x86;x64</Platforms>
+
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+		<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json
+    </RestoreAdditionalProjectSources>
+	</PropertyGroup>
+
+	<ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.*" />
+		<PackageReference Include="UnityEngine" Version="5.*" />
+	</ItemGroup>
+
+	<ItemGroup>
+    <ProjectReference Include="..\DearImGuiInjection.Core\DearImGuiInjection.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackFiles Include="$(TargetDir)*.dll" Exclude="@(PackExclude->'$(TargetDir)%(Identity)*')" />
+  </ItemGroup>
+
+  <Target Name="PackFilesToDirectory" AfterTargets="Build">
+    <MakeDir Directories="$(PackDir)" Condition="!Exists('$(PackDir)')" />
+    <Copy SourceFiles="@(PackFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

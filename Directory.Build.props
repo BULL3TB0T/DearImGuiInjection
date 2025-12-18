@@ -1,0 +1,29 @@
+<Project>
+  <ItemGroup>
+    <PackExclude Include="System." />
+    <PackExclude Include="FASM" />
+    <PackExclude Include="Iced." />
+  </ItemGroup>
+  <PropertyGroup>
+    <StartSteamGameAfterBuild>false</StartSteamGameAfterBuild>
+    <SteamAppId></SteamAppId>
+
+    <PackFolderName>Build</PackFolderName>
+    <PackDir>$(SolutionDir)$(PackFolderName)\DearImGuiInjection-$(Configuration)_$(Platform)\</PackDir>
+
+    <AssetsFolderName>Assets</AssetsFolderName>
+    <AssetsDir>$(SolutionDir)$(AssetsFolderName)\</AssetsDir>
+    
+    <LibsFolderName>Libraries</LibsFolderName>
+    <LibsDir>$(SolutionDir)$(LibsFolderName)\</LibsDir>
+
+    <CimguiFolderName>Cimgui</CimguiFolderName>
+    <CimguiDir>$(LibsDir)$(CimguiFolderName)\</CimguiDir>
+
+    <FasmFolderName>FASM</FasmFolderName>
+    <FasmDir>$(LibsDir)$(FasmFolderName)\</FasmDir>
+
+    <IL2CPPFolderName>IL2CPP</IL2CPPFolderName>
+    <IL2CPPDir>$(LibsDir)$(IL2CPPFolderName)\</IL2CPPDir>
+  </PropertyGroup>
+</Project>
