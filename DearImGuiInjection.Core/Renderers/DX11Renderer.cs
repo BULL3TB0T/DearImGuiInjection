@@ -79,7 +79,6 @@ public class DX11Renderer : IRenderer
         Log.Info("DX11Renderer.Init()");
 
         var windowHandle = User32.CreateFakeWindow();
-
         var desc = new SwapChainDescription()
         {
             BufferCount = 1,

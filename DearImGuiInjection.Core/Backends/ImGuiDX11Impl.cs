@@ -53,64 +53,25 @@ public static class ImGuiDX11Impl
 
     private struct BACKUP_DX11_STATE
     {
-        public InputLayout InputLayout;
-        public PrimitiveTopology PrimitiveTopology;
-        public Buffer IndexBuffer;
-        public Format IndexBufferFormat;
-        public int IndexBufferOffset;
-        public Buffer[] VertexBuffers;
-        public int[] VertexBufferStrides;
-        public int[] VertexBufferOffsets;
-
-        // RS
-        public RasterizerState RS;
         public RawRectangle[] ScissorRects;
         public RawViewportF[] Viewports;
-
-        // OM
+        public RasterizerState RS;
         public BlendState BlendState;
         public RawColor4 BlendFactor;
         public int SampleMask;
+        public int StencilRef;
         public DepthStencilState DepthStencilState;
-        public int DepthStencilRef;
-        public DepthStencilView DepthStencilView;
-        public RenderTargetView[] RenderTargetViews;
-
-        // VS
-        public VertexShader VS;
-        public Buffer[] VSConstantBuffers;
-        public SamplerState[] VSSamplers;
-        public ShaderResourceView[] VSResourceViews;
-
-        // HS
-        public HullShader HS;
-        public Buffer[] HSConstantBuffers;
-        public SamplerState[] HSSamplers;
-        public ShaderResourceView[] HSResourceViews;
-
-        // DS
-        public DomainShader DS;
-        public Buffer[] DSConstantBuffers;
-        public SamplerState[] DSSamplers;
-        public ShaderResourceView[] DSResourceViews;
-
-        // GS
-        public GeometryShader GS;
-        public Buffer[] GSConstantBuffers;
-        public SamplerState[] GSSamplers;
-        public ShaderResourceView[] GSResourceViews;
-
-        // PS
+        public ShaderResourceView PSShaderResource;
+        public SamplerState PSSampler;
         public PixelShader PS;
-        public Buffer[] PSConstantBuffers;
-        public SamplerState[] PSSamplers;
-        public ShaderResourceView[] PSResourceViews;
-
-        public ComputeShader CS;
-        public Buffer[] CSConstantBuffers;
-        public SamplerState[] CSSamplers;
-        public ShaderResourceView[] CSResourceViews;
-        public UnorderedAccessView[] CSUAVs;
+        public VertexShader VS;
+        public GeometryShader GS;
+        public PrimitiveTopology PrimitiveTopology;
+        public Buffer IndexBuffer, VSConstantBuffer;
+        public int IndexBufferOffset;
+        public Format IndexBufferFormat;
+        public VertexBufferBinding VertexBufferBinding;
+        public InputLayout InputLayout;
     }
 
     // [BETA] Selected render state data shared with callbacks.
@@ -269,45 +230,22 @@ public static class ImGuiDX11Impl
         {
             ScissorRects = new RawRectangle[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE],
             Viewports = new RawViewportF[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE],
-            VertexBuffers = new Buffer[InputAssemblerStage.VertexInputResourceSlotCount],
-            VertexBufferStrides = new int[InputAssemblerStage.VertexInputResourceSlotCount],
-            VertexBufferOffsets = new int[InputAssemblerStage.VertexInputResourceSlotCount],
-            InputLayout = device.InputAssembler.InputLayout
         };
-        device.InputAssembler.GetIndexBuffer(out old.IndexBuffer, out old.IndexBufferFormat, out old.IndexBufferOffset);
-        old.PrimitiveTopology = device.InputAssembler.PrimitiveTopology;
-        device.InputAssembler.GetVertexBuffers(0, InputAssemblerStage.VertexInputResourceSlotCount, old.VertexBuffers, old.VertexBufferStrides, old.VertexBufferOffsets);
+        device.Rasterizer.GetScissorRectangles(old.ScissorRects);
+        device.Rasterizer.GetViewports(old.Viewports);
         old.RS = device.Rasterizer.State;
-        device.Rasterizer.GetScissorRectangles<RawRectangle>(old.ScissorRects);
-        device.Rasterizer.GetViewports<RawViewportF>(old.Viewports);
         old.BlendState = device.OutputMerger.GetBlendState(out old.BlendFactor, out old.SampleMask);
-        old.DepthStencilState = device.OutputMerger.GetDepthStencilState(out old.DepthStencilRef);
-        old.RenderTargetViews = device.OutputMerger.GetRenderTargets(OutputMergerStage.SimultaneousRenderTargetCount, out old.DepthStencilView);
-        old.VS = device.VertexShader.Get();
-        old.VSSamplers = device.VertexShader.GetSamplers(0, CommonShaderStage.SamplerSlotCount);
-        old.VSConstantBuffers = device.VertexShader.GetConstantBuffers(0, CommonShaderStage.ConstantBufferApiSlotCount);
-        old.VSResourceViews = device.VertexShader.GetShaderResources(0, CommonShaderStage.InputResourceSlotCount);
-        old.HS = device.HullShader.Get();
-        old.HSSamplers = device.HullShader.GetSamplers(0, CommonShaderStage.SamplerSlotCount);
-        old.HSConstantBuffers = device.HullShader.GetConstantBuffers(0, CommonShaderStage.ConstantBufferApiSlotCount);
-        old.HSResourceViews = device.HullShader.GetShaderResources(0, CommonShaderStage.InputResourceSlotCount);
-        old.DS = device.DomainShader.Get();
-        old.DSSamplers = device.DomainShader.GetSamplers(0, CommonShaderStage.SamplerSlotCount);
-        old.DSConstantBuffers = device.DomainShader.GetConstantBuffers(0, CommonShaderStage.ConstantBufferApiSlotCount);
-        old.DSResourceViews = device.DomainShader.GetShaderResources(0, CommonShaderStage.InputResourceSlotCount);
-        old.GS = device.GeometryShader.Get();
-        old.GSSamplers = device.GeometryShader.GetSamplers(0, CommonShaderStage.SamplerSlotCount);
-        old.GSConstantBuffers = device.GeometryShader.GetConstantBuffers(0, CommonShaderStage.ConstantBufferApiSlotCount);
-        old.GSResourceViews = device.GeometryShader.GetShaderResources(0, CommonShaderStage.InputResourceSlotCount);
+        old.DepthStencilState = device.OutputMerger.GetDepthStencilState(out old.StencilRef);
+        old.PSShaderResource = device.PixelShader.GetShaderResources(0, 1)[0];
+        old.PSSampler = device.PixelShader.GetSamplers(0, 1)[0];
         old.PS = device.PixelShader.Get();
-        old.PSSamplers = device.PixelShader.GetSamplers(0, CommonShaderStage.SamplerSlotCount);
-        old.PSConstantBuffers = device.PixelShader.GetConstantBuffers(0, CommonShaderStage.ConstantBufferApiSlotCount);
-        old.PSResourceViews = device.PixelShader.GetShaderResources(0, CommonShaderStage.InputResourceSlotCount);
-        old.CS = device.ComputeShader.Get();
-        old.CSSamplers = device.ComputeShader.GetSamplers(0, CommonShaderStage.SamplerSlotCount);
-        old.CSConstantBuffers = device.ComputeShader.GetConstantBuffers(0, CommonShaderStage.ConstantBufferApiSlotCount);
-        old.CSResourceViews = device.ComputeShader.GetShaderResources(0, CommonShaderStage.InputResourceSlotCount);
-        old.CSUAVs = device.ComputeShader.GetUnorderedAccessViews(0, ComputeShaderStage.UnorderedAccessViewSlotCount);   // should be register count and not slot, but the value is correct
+        old.VS = device.VertexShader.Get();
+        old.VSConstantBuffer = device.VertexShader.GetConstantBuffers(0, 1)[0];
+        old.GS = device.GeometryShader.Get();
+        old.PrimitiveTopology = device.InputAssembler.PrimitiveTopology;
+        device.InputAssembler.GetIndexBuffer(out old.IndexBuffer, out old.IndexBufferFormat, out old.IndexBufferOffset);
+        device.InputAssembler.GetVertexBuffers(0, 1, [old.VertexBufferBinding.Buffer], [old.VertexBufferBinding.Stride], [old.VertexBufferBinding.Offset]);
+        old.InputLayout = device.InputAssembler.InputLayout;
 
         // Setup desired DX state
         SetupRenderState(draw_data, device);
@@ -367,41 +305,21 @@ public static class ImGuiDX11Impl
         platform_io.RendererRenderState = null;
 
         // Restore modified DX state
-        device.InputAssembler.InputLayout = old.InputLayout;
-        device.InputAssembler.SetIndexBuffer(old.IndexBuffer, old.IndexBufferFormat, old.IndexBufferOffset);
-        device.InputAssembler.PrimitiveTopology = old.PrimitiveTopology;
-        device.InputAssembler.SetVertexBuffers(0, old.VertexBuffers, old.VertexBufferStrides, old.VertexBufferOffsets);
-        device.Rasterizer.State = old.RS;
         device.Rasterizer.SetScissorRectangles(old.ScissorRects);
-        device.Rasterizer.SetViewports(old.Viewports, old.Viewports.Length);
+        device.Rasterizer.SetViewports(old.Viewports);
+        device.Rasterizer.State = old.RS;
         device.OutputMerger.SetBlendState(old.BlendState, old.BlendFactor, old.SampleMask);
-        device.OutputMerger.SetDepthStencilState(old.DepthStencilState, old.DepthStencilRef);
-        device.OutputMerger.SetRenderTargets(old.DepthStencilView, old.RenderTargetViews);
-        device.VertexShader.Set(old.VS);
-        device.VertexShader.SetSamplers(0, old.VSSamplers);
-        device.VertexShader.SetConstantBuffers(0, old.VSConstantBuffers);
-        device.VertexShader.SetShaderResources(0, old.VSResourceViews);
-        device.HullShader.Set(old.HS);
-        device.HullShader.SetSamplers(0, old.HSSamplers);
-        device.HullShader.SetConstantBuffers(0, old.HSConstantBuffers);
-        device.HullShader.SetShaderResources(0, old.HSResourceViews);
-        device.DomainShader.Set(old.DS);
-        device.DomainShader.SetSamplers(0, old.DSSamplers);
-        device.DomainShader.SetConstantBuffers(0, old.DSConstantBuffers);
-        device.DomainShader.SetShaderResources(0, old.DSResourceViews);
-        device.GeometryShader.Set(old.GS);
-        device.GeometryShader.SetSamplers(0, old.GSSamplers);
-        device.GeometryShader.SetConstantBuffers(0, old.GSConstantBuffers);
-        device.GeometryShader.SetShaderResources(0, old.GSResourceViews);
+        device.OutputMerger.SetDepthStencilState(old.DepthStencilState, old.StencilRef);
+        device.PixelShader.SetShaderResource(0, old.PSShaderResource);
+        device.PixelShader.SetSampler(0, old.PSSampler);
         device.PixelShader.Set(old.PS);
-        device.PixelShader.SetSamplers(0, old.PSSamplers);
-        device.PixelShader.SetConstantBuffers(0, old.PSConstantBuffers);
-        device.PixelShader.SetShaderResources(0, old.PSResourceViews);
-        device.ComputeShader.Set(old.CS);
-        device.ComputeShader.SetSamplers(0, old.CSSamplers);
-        device.ComputeShader.SetConstantBuffers(0, old.CSConstantBuffers);
-        device.ComputeShader.SetShaderResources(0, old.CSResourceViews);
-        device.ComputeShader.SetUnorderedAccessViews(0, old.CSUAVs);
+        device.VertexShader.Set(old.VS);
+        device.VertexShader.SetConstantBuffer(0, old.VSConstantBuffer);
+        device.GeometryShader.Set(old.GS);
+        device.InputAssembler.PrimitiveTopology = old.PrimitiveTopology;
+        device.InputAssembler.SetIndexBuffer(old.IndexBuffer, old.IndexBufferFormat, old.IndexBufferOffset);
+        device.InputAssembler.SetVertexBuffers(0, old.VertexBufferBinding);
+        device.InputAssembler.InputLayout = old.InputLayout;
     }
 
     private static unsafe void DestroyTexture(ImTextureData* tex)
@@ -548,12 +466,15 @@ public static class ImGuiDX11Impl
         _vertexShader = new VertexShader(_device, vertexShaderBlob.Bytecode);
 
         // Create the input layout
-        _inputLayout = new InputLayout(_device, vertexShaderBlob.Bytecode,
-        [
-            new InputElement("POSITION", 0, Format.R32G32_Float, 0, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Pos)), InputClassification.PerVertexData, 0),
-            new InputElement("TEXCOORD", 0, Format.R32G32_Float, 0, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Uv)), InputClassification.PerVertexData, 0),
-            new InputElement("COLOR", 0, Format.R8G8B8A8_UNorm, 0, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Col)), InputClassification.PerVertexData, 0)
-        ]);
+        _inputLayout = new InputLayout(_device, vertexShaderBlob.Bytecode, new[]
+        {
+            new InputElement("POSITION", 0, Format.R32G32_Float, 
+                (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Pos)), 0, InputClassification.PerVertexData, 0),
+            new InputElement("TEXCOORD", 0, Format.R32G32_Float,
+                (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Uv)), 0, InputClassification.PerVertexData, 0),
+            new InputElement("COLOR", 0, Format.R8G8B8A8_UNorm,
+                (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Col)), 0, InputClassification.PerVertexData, 0),
+        });
         vertexShaderBlob?.Dispose();
 
         // Create the constant buffer

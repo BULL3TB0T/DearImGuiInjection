@@ -56,8 +56,8 @@ public static class DearImGuiInjectionCore
         "Saves the mouse cursor position when the ImGui is closed and restores it when the ImGui is opened.";
     internal const bool SaveRestoreCursorPositionDefaultValue = true;
     
-    public static event Action Render { add { RenderAction += value; } remove { RenderAction -= value; } }
-    internal static Action RenderAction;
+    public static event Action OnRender { add { Render += value; } remove { Render -= value; } }
+    internal static Action Render;
 
     private static ImGuiContextPtr Context;
     private static ImGuiIOPtr IO;
@@ -81,6 +81,7 @@ public static class DearImGuiInjectionCore
         IO = ImGui.GetIO();
         IO.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
         IO.ConfigFlags |= ImGuiConfigFlags.NavEnableGamepad;
+        IO.ConfigFlags |= ImGuiConfigFlags.DockingEnable;
         IO.Handle->IniFilename = (byte*)Marshal.StringToHGlobalAnsi(IniConfigPath);
         if (UseDefaultTheme.Get())
             ImGui.StyleColorsDark();
@@ -93,7 +94,7 @@ public static class DearImGuiInjectionCore
     {
         if (!Initialized)
             return;
-        RenderAction = null;
+        Render = null;
         DisposeRenderer();
         RendererKind = RendererKind.None;
         Marshal.FreeHGlobal((IntPtr)IO.Handle->IniFilename);
