@@ -67,7 +67,7 @@ public static class ImGuiDX11Impl
         public VertexShader VS;
         public GeometryShader GS;
         public PrimitiveTopology PrimitiveTopology;
-        public Buffer IndexBuffer, VSConstantBuffer;
+        public Buffer VSConstantBuffer, IndexBuffer;
         public int IndexBufferOffset;
         public Format IndexBufferFormat;
         public VertexBufferBinding VertexBufferBinding;
