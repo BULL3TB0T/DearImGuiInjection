@@ -32,7 +32,7 @@ internal static class RendererManager
             {
                 isSupported = renderer.IsSupported();
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
                 Log.Error($"Renderer {renderer.Kind} IsSupported() failed: {ex}");
                 isSupported = false;
