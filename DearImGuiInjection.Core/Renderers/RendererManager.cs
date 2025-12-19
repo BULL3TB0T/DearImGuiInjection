@@ -34,7 +34,7 @@ internal static class RendererManager
             }
             catch (Exception e)
             {
-                Log.Error($"Renderer {renderer.Kind} IsSupported() failed: {ex}");
+                Log.Error($"Renderer {renderer.Kind} IsSupported() failed: {e}");
                 isSupported = false;
             }
             if (!isSupported)
