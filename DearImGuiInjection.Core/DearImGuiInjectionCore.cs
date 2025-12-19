@@ -56,17 +56,17 @@ public static class DearImGuiInjectionCore
         "Saves the mouse cursor position when the ImGui is closed and restores it when the ImGui is opened.";
     internal const bool SaveRestoreCursorPositionDefaultValue = true;
     
-    public static event Action OnRender { add { Render += value; } remove { Render -= value; } }
+    public static event Action OnRender { add => Render += value; remove => Render -= value; }
     internal static Action Render;
+
+    public static RendererKind RendererKind => RendererManager.Kind;
 
     private static ImGuiContextPtr Context;
     private static ImGuiIOPtr IO;
 
-    public static RendererKind RendererKind { get; internal set; }
-
     internal static bool Init(string configPath, string assemblyFolderPath)
     {
-        if (!InitRenderer())
+        if (!RendererManager.Init())
             return false;
         IniConfigPath = Path.Combine(configPath, IniFileName);
         AssemblyFolderPath = assemblyFolderPath;
@@ -95,73 +95,10 @@ public static class DearImGuiInjectionCore
         if (!Initialized)
             return;
         Render = null;
-        DisposeRenderer();
-        RendererKind = RendererKind.None;
+        RendererManager.Shutdown();
         Marshal.FreeHGlobal((IntPtr)IO.Handle->IniFilename);
         ImGui.DestroyContext(Context);
         Context = null;
         Initialized = false;
     }
-
-    private static bool InitRenderer()
-    {
-        if (RendererKind != RendererKind.None)
-            return true;
-        foreach (RendererKind availableRenderer in Enum.GetValues(typeof(RendererKind)))
-        {
-            var renderer = GetImplementationFromRendererKind(availableRenderer);
-            if (renderer != null && renderer.Init())
-            {
-                RendererKind = availableRenderer;
-                switch (RendererKind)
-                {
-                    case RendererKind.D3D11:
-                        ImGuiDX11.Init();
-                        return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private static void DisposeRenderer()
-    {
-        switch (RendererKind)
-        {
-            case RendererKind.None:
-            default:
-                break;
-            case RendererKind.D3D11:
-                ImGuiDX11.Dispose();
-                break;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static IRenderer NewDX11Renderer()
-    {
-        var d3d11ModuleIsHere = false;
-        var d3d12ModuleIsHere = false;
-        foreach (var processModule in Process.GetCurrentProcess().Modules.Cast<ProcessModule>())
-        {
-            if (processModule?.ModuleName != null)
-            {
-                var moduleName = processModule.ModuleName.ToLowerInvariant();
-                if (moduleName.Contains("d3d11"))
-                    d3d11ModuleIsHere = true;
-                else if (moduleName.Contains("d3d12"))
-                    d3d12ModuleIsHere = true;
-            }
-        }
-        if (!d3d11ModuleIsHere || d3d12ModuleIsHere)
-            return null;
-        return new DX11Renderer();
-    }
-
-    private static IRenderer GetImplementationFromRendererKind(RendererKind rendererKind) =>
-        rendererKind switch
-        {
-            RendererKind.D3D11 => NewDX11Renderer(),
-            _ => null,
-        };
 }

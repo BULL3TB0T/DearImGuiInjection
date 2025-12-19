@@ -15,12 +15,11 @@ using BlendState = SharpDX.Direct3D11.BlendState;
 using Buffer = SharpDX.Direct3D11.Buffer;
 using Device = SharpDX.Direct3D11.Device;
 using MapFlags = SharpDX.Direct3D11.MapFlags;
+using System.Diagnostics;
 
 namespace DearImGuiInjection.Backends;
 
-// dear imgui: Renderer Backend for DirectX11 (1.92.2b)
-
-public static class ImGuiDX11Impl
+internal static class ImGuiImplDX11
 {
     private static Device _device;
     private static DeviceContext _deviceContext;
@@ -325,8 +324,9 @@ public static class ImGuiDX11Impl
     private static unsafe void DestroyTexture(ImTextureData* tex)
     {
         Texture* backend_tex = (Texture*)tex->BackendUserData;
-        if (backend_tex == null || backend_tex->pTextureView != (IntPtr)tex->GetTexID())
+        if (backend_tex == null)
             return;
+        Debug.Assert(backend_tex->pTextureView == (IntPtr)tex->GetTexID());
         Marshal.Release(backend_tex->pTexture);
         Marshal.Release(backend_tex->pTextureView);
         Marshal.FreeHGlobal((IntPtr)backend_tex);
@@ -343,8 +343,9 @@ public static class ImGuiDX11Impl
         {
             // Create and upload new texture to graphics system
             //Log.Debug(string.Format("UpdateTexture #%03d: WantCreate %dx%d\n", tex->UniqueID, tex->Width, tex->Height));
-            if (tex->TexID != ImTextureID.Null || tex->BackendUserData != null || tex->Format != ImTextureFormat.Rgba32)
-                return;
+            Debug.Assert(tex->TexID == ImTextureID.Null && tex->BackendUserData == null);
+            Debug.Assert(tex->Format == ImTextureFormat.Rgba32);
+            IntPtr pixels = (IntPtr)tex->GetPixels();
             Texture* backend_tex = (Texture*)Marshal.AllocHGlobal(Marshal.SizeOf<Texture>());
 
             // Create texture
@@ -358,12 +359,8 @@ public static class ImGuiDX11Impl
             desc.Usage = ResourceUsage.Default;
             desc.BindFlags = BindFlags.ShaderResource;
             desc.CpuAccessFlags = CpuAccessFlags.None;
-            Texture2D texture2D = new(_device, desc, new DataRectangle((IntPtr)tex->GetPixels(), desc.Width * 4));
-            if (texture2D == null)
-            {
-                Log.Error("Backend failed to create texture!");
-                return;
-            }
+            Texture2D texture2D = new(_device, desc, new DataRectangle(pixels, desc.Width * 4));
+            Debug.Assert(texture2D != null, "Backend failed to create texture!");
             backend_tex->pTexture = texture2D.NativePointer;
             Marshal.AddRef(backend_tex->pTexture);
 
@@ -374,11 +371,7 @@ public static class ImGuiDX11Impl
             srvDesc.Texture2D.MipLevels = desc.MipLevels;
             srvDesc.Texture2D.MostDetailedMip = 0;
             ShaderResourceView shaderResourceView = new(_device, texture2D, srvDesc);
-            if (shaderResourceView == null)
-            {
-                Log.Error("Backend failed to create texture!");
-                return;
-            }
+            Debug.Assert(shaderResourceView != null, "Backend failed to create texture!");
             backend_tex->pTextureView = shaderResourceView.NativePointer;
             Marshal.AddRef(backend_tex->pTextureView);
 
@@ -392,8 +385,7 @@ public static class ImGuiDX11Impl
             // Update selected blocks. We only ever write to textures regions which have never been used before!
             // This backend choose to use tex->Updates[] but you can use tex->UpdateRect to upload a single region.
             Texture* backend_tex = (Texture*)tex->BackendUserData;
-            if (backend_tex->pTextureView != (IntPtr)tex->GetTexID())
-                return;
+            Debug.Assert(backend_tex->pTextureView == (IntPtr)tex->GetTexID());
             var texture2D = new Texture2D(backend_tex->pTexture);
             for (int n = 0; n < tex->Updates.Size; n++)
             {
@@ -466,14 +458,14 @@ public static class ImGuiDX11Impl
         _vertexShader = new VertexShader(_device, vertexShaderBlob.Bytecode);
 
         // Create the input layout
-        _inputLayout = new InputLayout(_device, vertexShaderBlob.Bytecode, new[]
+        _inputLayout = new InputLayout(_device, vertexShaderBlob.Bytecode, new InputElement[]
         {
-            new InputElement("POSITION", 0, Format.R32G32_Float, 
-                (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Pos)), 0, InputClassification.PerVertexData, 0),
-            new InputElement("TEXCOORD", 0, Format.R32G32_Float,
-                (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Uv)), 0, InputClassification.PerVertexData, 0),
-            new InputElement("COLOR", 0, Format.R8G8B8A8_UNorm,
-                (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Col)), 0, InputClassification.PerVertexData, 0),
+            new("POSITION", 0, Format.R32G32_Float, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Pos)),
+                0, InputClassification.PerVertexData, 0),
+            new("TEXCOORD", 0, Format.R32G32_Float, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Uv)),
+                0, InputClassification.PerVertexData, 0),
+            new("COLOR", 0, Format.R8G8B8A8_UNorm, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Col)),
+                0, InputClassification.PerVertexData, 0)
         });
         vertexShaderBlob?.Dispose();
 
@@ -622,8 +614,8 @@ public static class ImGuiDX11Impl
         io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
         io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;   // We can honor ImGuiPlatformIO::Textures[] requests during render.
 
-        var platformIo = ImGui.GetPlatformIO();
-        platformIo.RendererTextureMaxWidth = platformIo.RendererTextureMaxHeight = Texture2D.MaximumTexture2DSize;
+        var platform_io = ImGui.GetPlatformIO();
+        platform_io.RendererTextureMaxWidth = platform_io.RendererTextureMaxHeight = Texture2D.MaximumTexture2DSize;
         
         _device = new(device);
         _deviceContext = new(deviceContext);
@@ -638,12 +630,7 @@ public static class ImGuiDX11Impl
         _deviceContext = null;
 
         var io = ImGui.GetIO();
-        IntPtr backendRendererName = (IntPtr)io.BackendRendererName;
-        if (backendRendererName != IntPtr.Zero)
-        {
-            Marshal.FreeHGlobal(backendRendererName);
-            io.BackendRendererName = null;
-        }
+        Marshal.FreeHGlobal((IntPtr)io.Handle->BackendRendererName);
         io.BackendFlags &= ~ImGuiBackendFlags.RendererHasVtxOffset;
         io.BackendFlags &= ~ImGuiBackendFlags.RendererHasTextures;
     }
@@ -652,6 +639,6 @@ public static class ImGuiDX11Impl
     {
         if (_vertexShader == null)
             if (!CreateDeviceObjects())
-                Log.Error("ImGui_ImplDX11_CreateDeviceObjects() failed!");
+                Debug.Assert(false, "ImGui_ImplDX11_CreateDeviceObjects() failed!");
     }
 }

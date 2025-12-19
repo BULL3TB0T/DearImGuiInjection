@@ -1,12 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using DearImGuiInjection;
+﻿using DearImGuiInjection;
+using DearImGuiInjection.Backends;
 using DearImGuiInjection.Windows;
 using Reloaded.Hooks;
 using Reloaded.Hooks.Tools;
 using SharpDX.Direct3D;
 using SharpDX.Direct3D11;
 using SharpDX.DXGI;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Runtime.CompilerServices;
 
 using Device = SharpDX.Direct3D11.Device;
 
@@ -16,7 +20,7 @@ namespace DearImGuiInjection.Renderers;
 /// Contains a full list of IDXGISwapChain functions to be used
 /// as an indexer into the SwapChain Virtual Function Table entries.
 /// </summary>
-public enum IDXGISwapChain
+internal enum IDXGISwapChain
 {
     // IUnknown
     QueryInterface = 0,
@@ -45,7 +49,7 @@ public enum IDXGISwapChain
     GetLastPresentCount = 17,
 }
 
-public class DX11Renderer : IRenderer
+public class D3D11Renderer : IRenderer
 {
     // https://github.com/BepInEx/BepInEx/blob/master/Runtimes/Unity/BepInEx.Unity.IL2CPP/Hook/INativeDetour.cs#L54
     // Workaround for CoreCLR collecting all delegates
@@ -74,10 +78,36 @@ public class DX11Renderer : IRenderer
     public static event Action<SwapChain, uint, uint, uint, Format, uint> PostResizeBuffers { add { _postResizeBuffers += value; } remove { _postResizeBuffers -= value; } }
     private static Action<SwapChain, uint, uint, uint, Format, uint> _postResizeBuffers;
 
-    public unsafe bool Init()
-    {
-        Log.Info("DX11Renderer.Init()");
+    public RendererKind Kind => RendererKind.D3D11;
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public bool IsSupported()
+    {
+        bool hasD3D11 = false;
+        bool hasD3D12 = false;
+        try
+        {
+            foreach (var module in Process.GetCurrentProcess().Modules.Cast<ProcessModule>())
+            {
+                var name = module?.ModuleName;
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                name = name.ToLowerInvariant();
+                if (name.Contains("d3d11"))
+                    hasD3D11 = true;
+                else if (name.Contains("d3d12"))
+                    hasD3D12 = true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+        return hasD3D11 || !hasD3D12;
+    }
+
+    public bool Init()
+    {
         var windowHandle = User32.CreateFakeWindow();
         var desc = new SwapChainDescription()
         {
@@ -93,26 +123,20 @@ public class DX11Renderer : IRenderer
         var swapChainVTable = VirtualFunctionTable.FromObject((nuint)(nint)swapChain.NativePointer, Enum.GetNames(typeof(IDXGISwapChain)).Length);
         var swapChainPresentFunctionPtr = (nuint)(nint)swapChainVTable.TableEntries[(int)IDXGISwapChain.Present].FunctionPointer;
         var swapChainResizeBuffersFunctionPtr = (nuint)(nint)swapChainVTable.TableEntries[(int)IDXGISwapChain.ResizeBuffers].FunctionPointer;
-
-        swapChain.Dispose();
         device.Dispose();
+        swapChain.Dispose();
 
         User32.DestroyWindow(windowHandle);
 
-        {
-            _cache.Add(_swapChainPresentHookDelegate);
+        _cache.Add(_swapChainPresentHookDelegate);
+        _swapChainPresentHook = new(_swapChainPresentHookDelegate, swapChainPresentFunctionPtr);
+        _swapChainPresentHook.Activate();
 
-            _swapChainPresentHook = new(_swapChainPresentHookDelegate, swapChainPresentFunctionPtr);
-            _swapChainPresentHook.Activate();
-        }
+        _cache.Add(_swapChainResizeBuffersHookDelegate);
+        _swapChainResizeBuffersHook = new(_swapChainResizeBuffersHookDelegate, swapChainResizeBuffersFunctionPtr);
+        _swapChainResizeBuffersHook.Activate();
 
-        {
-            _cache.Add(_swapChainResizeBuffersHookDelegate);
-
-            _swapChainResizeBuffersHook = new(_swapChainResizeBuffersHookDelegate, swapChainResizeBuffersFunctionPtr);
-            _swapChainResizeBuffersHook.Activate();
-        }
-
+        ImGuiDX11.Init();
         return true;
     }
 
@@ -125,6 +149,8 @@ public class DX11Renderer : IRenderer
         _swapChainPresentHook = null;
 
         _onPresentAction = null;
+
+        ImGuiDX11.Dispose();
     }
 
     private static IntPtr SwapChainPresentHook(IntPtr self, uint syncInterval, uint flags)

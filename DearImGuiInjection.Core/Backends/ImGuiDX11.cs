@@ -24,22 +24,22 @@ internal static class ImGuiDX11
 
     internal static void Init()
     {
-        DX11Renderer.OnPresent += OnPresent;
-        DX11Renderer.PreResizeBuffers += PreResizeBuffers;
-        DX11Renderer.PostResizeBuffers += PostResizeBuffers;
+        D3D11Renderer.OnPresent += OnPresent;
+        D3D11Renderer.PreResizeBuffers += PreResizeBuffers;
+        D3D11Renderer.PostResizeBuffers += PostResizeBuffers;
     }
 
     internal static void Dispose()
     {
-        DX11Renderer.PostResizeBuffers -= PostResizeBuffers;
-        DX11Renderer.PreResizeBuffers -= PreResizeBuffers;
-        DX11Renderer.OnPresent -= OnPresent;
+        D3D11Renderer.PostResizeBuffers -= PostResizeBuffers;
+        D3D11Renderer.PreResizeBuffers -= PreResizeBuffers;
+        D3D11Renderer.OnPresent -= OnPresent;
 
         if (!DearImGuiInjectionCore.Initialized)
             return;
 
-        ImGuiDX11Impl.Shutdown();
-        ImGuiWin32Impl.Shutdown();
+        ImGuiImplDX11.Shutdown();
+        ImGuiImplWin32.Shutdown();
         Log.Info("ImGui_ImplWin32_Shutdown()");
 
         _renderTargetView?.Dispose();
@@ -65,7 +65,7 @@ internal static class ImGuiDX11
         if (_windowHandle == IntPtr.Zero)
             return;
 
-        ImGuiWin32Impl.Init(_windowHandle);
+        ImGuiImplWin32.Init(_windowHandle);
         Log.Info($"ImGui_ImplWin32_Init(), Window Handle: {_windowHandle:X}");
 
         _myWindowProc = new User32.WndProcDelegate(WndProcHandler);
@@ -81,7 +81,7 @@ internal static class ImGuiDX11
         using var backBuffer = swapChain.GetBackBuffer<Texture2D>(0);
         _renderTargetView = new RenderTargetView(_device, backBuffer);
 
-        ImGuiDX11Impl.Init(_device.NativePointer, _deviceContext.NativePointer);
+        ImGuiImplDX11.Init(_device.NativePointer, _deviceContext.NativePointer);
     }
 
     private static bool IsTargetWindowHandle(IntPtr windowHandle)
@@ -96,7 +96,7 @@ internal static class ImGuiDX11
         if (!DearImGuiInjectionCore.Initialized)
             return User32.CallWindowProc(_originalWindowProc, hWnd, uMsg, wParam, lParam);
 
-        ImGuiWin32Impl.WndProcHandler(hWnd, uMsg, wParam, lParam);
+        ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam);
 
         if (uMsg == WindowMessage.WM_KEYUP &&
             (VirtualKey)wParam == DearImGuiInjectionCore.CursorVisibility.Get())
@@ -157,8 +157,8 @@ internal static class ImGuiDX11
 
     private static void NewFrame()
     {
-        ImGuiDX11Impl.NewFrame();
-        ImGuiWin32Impl.NewFrame();
+        ImGuiImplDX11.NewFrame();
+        ImGuiImplWin32.NewFrame();
         ImGui.NewFrame();
 
         if (DearImGuiInjectionCore.Render != null)
@@ -208,7 +208,7 @@ internal static class ImGuiDX11
 
         _deviceContext.OutputMerger.SetRenderTargets(_renderTargetView);
 
-        ImGuiDX11Impl.RenderDrawData(ImGui.GetDrawData().Handle);
+        ImGuiImplDX11.RenderDrawData(ImGui.GetDrawData().Handle);
     }
 
     private static void PreResizeBuffers(SwapChain swapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapchainFlags)
@@ -226,7 +226,7 @@ internal static class ImGuiDX11
         _renderTargetView?.Dispose();
         _renderTargetView = null;
 
-        ImGuiDX11Impl.InvalidateDeviceObjects();
+        ImGuiImplDX11.InvalidateDeviceObjects();
     }
 
     private static void PostResizeBuffers(SwapChain swapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapchainFlags)
@@ -241,6 +241,6 @@ internal static class ImGuiDX11
             return;
         }
 
-        ImGuiDX11Impl.CreateDeviceObjects();
+        ImGuiImplDX11.CreateDeviceObjects();
     }
 }

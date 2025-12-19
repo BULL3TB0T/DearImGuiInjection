@@ -1,14 +1,12 @@
 ﻿namespace DearImGuiInjection.Renderers;
 
-public enum RendererKind
+internal interface IRenderer
 {
-    None,
-    D3D11
-}
+    internal RendererKind Kind { get; }
 
-public interface IRenderer
-{
-    public bool Init();
+    internal bool IsSupported();
 
-    public void Dispose();
+    internal bool Init();
+
+    internal void Dispose();
 }

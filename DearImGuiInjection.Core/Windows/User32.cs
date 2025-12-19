@@ -118,14 +118,11 @@ internal static class User32
     public static IntPtr CreateFakeWindow()
     {
         // Register window class
-        const string defaultWindowClass = "DearImGuiInjectionWindowClass";
-
-        // Register window class
         var windowClass = new WNDCLASSEXW();
         windowClass.cbSize = Marshal.SizeOf<WNDCLASSEXW>();
         windowClass.lpfnWndProc = Marshal.GetFunctionPointerForDelegate(s_WndProc);
         windowClass.hInstance = GetModuleHandle(null);
-        windowClass.lpszClassName = defaultWindowClass;
+        windowClass.lpszClassName = "DearImGuiInjectionWindowClass";
 
         var registeredClass = RegisterClassExW(ref windowClass);
         if (registeredClass == 0)
