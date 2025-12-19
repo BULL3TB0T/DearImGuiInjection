@@ -42,7 +42,7 @@ internal static class RendererManager
             _activeRenderer = renderer;
             try
             {
-                Log.Error($"Renderer {renderer.Kind} Init()");
+                Log.Info($"Renderer {renderer.Kind} Init()");
                 renderer.Init();
             }
             catch (Exception ex)

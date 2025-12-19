@@ -36,7 +36,31 @@ internal static class ImGuiImplDX11
     private static int _vertexBufferSize;
     private static int _indexBufferSize;
 
-    // DirectX11 data
+    // Perfomance
+    private static IntPtr _lastBoundTexId;
+    private static ShaderResourceView _lastBoundSrv;
+
+    private const int D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE = 16;
+    private static readonly RawRectangle[] _scissorRects = 
+        new RawRectangle[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE];
+    private static readonly RawViewportF[] _viewports = 
+        new RawViewportF[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE];
+
+    private static readonly int _imDrawVertSizeOf = Marshal.SizeOf<ImDrawVert>();
+    private static readonly int _imDrawIdxSizeOf = Marshal.SizeOf<ImDrawIdx>();
+    private static readonly int _textureSizeOf = Marshal.SizeOf<Texture>();
+    private static readonly int _vertexConstantBufferSizeOf = Marshal.SizeOf<VERTEX_CONSTANT_BUFFER_DX11>();
+
+    private static readonly InputElement[] _inputElements = new InputElement[]
+    {
+        new("POSITION", 0, Format.R32G32_Float, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Pos)),
+            0, InputClassification.PerVertexData, 0),
+        new("TEXCOORD", 0, Format.R32G32_Float, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Uv)),
+            0, InputClassification.PerVertexData, 0),
+        new("COLOR", 0, Format.R8G8B8A8_UNorm, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Col)),
+            0, InputClassification.PerVertexData, 0)
+    };
+
     [StructLayout(LayoutKind.Sequential)]
     private struct Texture
     {
@@ -136,7 +160,7 @@ internal static class ImGuiImplDX11
         device_ctx.InputAssembler.InputLayout = _inputLayout;
         device_ctx.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding()
         {
-            Stride = Marshal.SizeOf<ImDrawVert>(),
+            Stride = _imDrawVertSizeOf,
             Offset = 0,
             Buffer = _vertexBuffer
         });
@@ -186,7 +210,7 @@ internal static class ImGuiImplDX11
             _vertexBuffer = new Buffer(_device, new BufferDescription
             {
                 Usage = ResourceUsage.Dynamic,
-                SizeInBytes = _vertexBufferSize * Marshal.SizeOf<ImDrawVert>(),
+                SizeInBytes = _vertexBufferSize * _imDrawVertSizeOf,
                 BindFlags = BindFlags.VertexBuffer,
                 CpuAccessFlags = CpuAccessFlags.Write
             });
@@ -199,7 +223,7 @@ internal static class ImGuiImplDX11
             _indexBuffer = new Buffer(_device, new BufferDescription
             {
                 Usage = ResourceUsage.Dynamic,
-                SizeInBytes = _indexBufferSize * Marshal.SizeOf<ImDrawIdx>(),
+                SizeInBytes = _indexBufferSize * _imDrawIdxSizeOf,
                 BindFlags = BindFlags.IndexBuffer,
                 CpuAccessFlags = CpuAccessFlags.Write
             });
@@ -213,9 +237,9 @@ internal static class ImGuiImplDX11
         for (int n = 0; n < draw_data->CmdListsCount; n++)
         {
             var cmd_list = draw_data->CmdLists[n].Handle;
-            var len = cmd_list->VtxBuffer.Size * Marshal.SizeOf<ImDrawVert>();
+            var len = cmd_list->VtxBuffer.Size * _imDrawVertSizeOf;
             System.Buffer.MemoryCopy(cmd_list->VtxBuffer.Data, vtx_dst, len, len);
-            len = cmd_list->IdxBuffer.Size * Marshal.SizeOf<ImDrawIdx>();
+            len = cmd_list->IdxBuffer.Size * _imDrawIdxSizeOf;
             System.Buffer.MemoryCopy(cmd_list->IdxBuffer.Data, idx_dst, len, len);
             vtx_dst += cmd_list->VtxBuffer.Size;
             idx_dst += cmd_list->IdxBuffer.Size;
@@ -224,11 +248,10 @@ internal static class ImGuiImplDX11
         device.UnmapSubresource(_indexBuffer, 0);
 
         // Backup DX state that will be modified to restore it afterwards (unfortunately this is very ugly looking and verbose. Close your eyes!)
-        const int D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE = 16;
         BACKUP_DX11_STATE old = new BACKUP_DX11_STATE()
         {
-            ScissorRects = new RawRectangle[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE],
-            Viewports = new RawViewportF[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE],
+            ScissorRects = _scissorRects,
+            Viewports = _viewports,
         };
         device.Rasterizer.GetScissorRectangles(old.ScissorRects);
         device.Rasterizer.GetViewports(old.Viewports);
@@ -243,7 +266,8 @@ internal static class ImGuiImplDX11
         old.GS = device.GeometryShader.Get();
         old.PrimitiveTopology = device.InputAssembler.PrimitiveTopology;
         device.InputAssembler.GetIndexBuffer(out old.IndexBuffer, out old.IndexBufferFormat, out old.IndexBufferOffset);
-        device.InputAssembler.GetVertexBuffers(0, 1, [old.VertexBufferBinding.Buffer], [old.VertexBufferBinding.Stride], [old.VertexBufferBinding.Offset]);
+        device.InputAssembler.GetVertexBuffers(0, 1, [ old.VertexBufferBinding.Buffer ], [ old.VertexBufferBinding.Stride ],
+            [ old.VertexBufferBinding.Offset ]);
         old.InputLayout = device.InputAssembler.InputLayout;
 
         // Setup desired DX state
@@ -294,7 +318,13 @@ internal static class ImGuiImplDX11
                     device.Rasterizer.SetScissorRectangle((int)clip_min.X, (int)clip_min.Y, (int)clip_max.X, (int)clip_max.Y);
 
                     // Bind texture, Draw
-                    device.PixelShader.SetShaderResource(0, new(pcmd.GetTexID()));
+                    IntPtr texture_id = pcmd.GetTexID();
+                    if (texture_id != _lastBoundTexId)
+                    {
+                        _lastBoundTexId = texture_id;
+                        _lastBoundSrv = texture_id == IntPtr.Zero ? null : new(texture_id);
+                    }
+                    device.PixelShader.SetShaderResource(0, _lastBoundSrv);
                     device.DrawIndexed((int)pcmd.ElemCount, (int)(pcmd.IdxOffset + global_idx_offset), (int)(pcmd.VtxOffset + global_vtx_offset));
                 }
             }
@@ -346,7 +376,7 @@ internal static class ImGuiImplDX11
             Debug.Assert(tex->TexID == ImTextureID.Null && tex->BackendUserData == null);
             Debug.Assert(tex->Format == ImTextureFormat.Rgba32);
             IntPtr pixels = (IntPtr)tex->GetPixels();
-            Texture* backend_tex = (Texture*)Marshal.AllocHGlobal(Marshal.SizeOf<Texture>());
+            Texture* backend_tex = (Texture*)Marshal.AllocHGlobal(_textureSizeOf);
 
             // Create texture
             var desc = new Texture2DDescription();
@@ -458,21 +488,13 @@ internal static class ImGuiImplDX11
         _vertexShader = new VertexShader(_device, vertexShaderBlob.Bytecode);
 
         // Create the input layout
-        _inputLayout = new InputLayout(_device, vertexShaderBlob.Bytecode, new InputElement[]
-        {
-            new("POSITION", 0, Format.R32G32_Float, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Pos)),
-                0, InputClassification.PerVertexData, 0),
-            new("TEXCOORD", 0, Format.R32G32_Float, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Uv)),
-                0, InputClassification.PerVertexData, 0),
-            new("COLOR", 0, Format.R8G8B8A8_UNorm, (int)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Col)),
-                0, InputClassification.PerVertexData, 0)
-        });
+        _inputLayout = new InputLayout(_device, vertexShaderBlob.Bytecode, _inputElements);
         vertexShaderBlob?.Dispose();
 
         // Create the constant buffer
         _vertexConstantBuffer = new Buffer(_device, new BufferDescription
         {
-            SizeInBytes = Marshal.SizeOf<VERTEX_CONSTANT_BUFFER_DX11>(),
+            SizeInBytes = _vertexConstantBufferSizeOf,
             Usage = ResourceUsage.Dynamic,
             BindFlags = BindFlags.ConstantBuffer,
             CpuAccessFlags = CpuAccessFlags.Write,
