@@ -6,7 +6,6 @@
   </ItemGroup>
   <PropertyGroup>
     <StartSteamGameAfterBuild>false</StartSteamGameAfterBuild>
-    <SteamAppId></SteamAppId>
     <SteamAppId>0</SteamAppId>
 
     <PackFolderName>Build</PackFolderName>
