@@ -33,13 +33,13 @@ public class UnityMainThreadDispatcher : MonoBehaviour
         }
     }
 
-    public static void Enqueue(IEnumerator action)
+    public static void Enqueue(IEnumerator routine)
     {
         lock (_executionQueue)
         {
             _executionQueue.Enqueue(() =>
             {
-                _instance.StartCoroutine(action.WrapToIl2Cpp());
+                _instance.StartCoroutine(routine.WrapToIl2Cpp());
             });
         }
     }

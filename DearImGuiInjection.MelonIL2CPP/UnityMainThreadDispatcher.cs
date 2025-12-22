@@ -1,13 +1,8 @@
-﻿using Il2CppInterop.Runtime;
-using Il2CppSystem.Collections;
-using Il2CppSystem.Collections.Generic;
-using MelonLoader;
+﻿using MelonLoader;
 using System.Collections;
 using UnityEngine;
 
-using IEnumerator = System.Collections.IEnumerator;
-
-namespace DearImGuiInjection.BepInEx5;
+namespace DearImGuiInjection.MelonIL2CPP;
 
 public class UnityMainThreadDispatcher : MonoBehaviour
 {

@@ -1,34 +1,31 @@
 ﻿using BepInEx;
+using BepInEx.Logging;
 using DearImGuiInjection;
 using DearImGuiInjection.Windows;
 
 namespace DearImGuiInjection.BepInEx5;
 
-[BepInPlugin(Metadata.GUID, Metadata.Name, Metadata.Version)]
-internal class DearImGuiInjectionBepInEx5 : BaseUnityPlugin
-{
+[BepInPlugin(DearImGuiInjectionMetadata.GUID, DearImGuiInjectionMetadata.Name, DearImGuiInjectionMetadata.Version)]
+internal class DearImGuiInjectionBepInEx5 : BaseUnityPlugin, ILoader, ILog
+{ 
+    public LoaderKind Kind => LoaderKind.BepInEx5;
+
+    public string ConfigPath => Paths.ConfigPath;
+    public string AssemblyPath => Path.GetDirectoryName(base.Info.Location);
+
     private void Awake()
     {
-        Log.Init(new LogBepInEx(Logger));
-        gameObject.AddComponent<UnityMainThreadDispatcher>();
-        if (!DearImGuiInjectionCore.Init(Paths.ConfigPath, Path.GetDirectoryName(Info.Location)))
+        if (!DearImGuiInjectionCore.Init(this, this))
             return;
-        DearImGuiInjectionCore.UseDefaultTheme = new ConfigEntryBepInEx<bool>(Config.Bind(
-            DearImGuiInjectionCore.UseDefaultThemeCategory,
-            DearImGuiInjectionCore.UseDefaultThemeKey,
-            DearImGuiInjectionCore.UseDefaultThemeDefaultValue,
-            DearImGuiInjectionCore.UseDefaultThemeDescription));
-        DearImGuiInjectionCore.CursorVisibility = new ConfigEntryBepInEx<VirtualKey>(Config.Bind(
-            DearImGuiInjectionCore.CursorVisibilityCategory,
-            DearImGuiInjectionCore.CursorVisibilityKey,
-            DearImGuiInjectionCore.CursorVisibilityDefaultValue,
-            DearImGuiInjectionCore.CursorVisibilityDescription));
-        DearImGuiInjectionCore.SaveOrRestoreCursorPosition = new ConfigEntryBepInEx<bool>(Config.Bind(
-            DearImGuiInjectionCore.SaveRestoreCursorPositionCategory,
-            DearImGuiInjectionCore.SaveRestoreCursorPositionKey,
-            DearImGuiInjectionCore.SaveRestoreCursorPositionDefaultValue,
-            DearImGuiInjectionCore.SaveRestoreCursorPositionDescription));
+        gameObject.AddComponent<UnityMainThreadDispatcher>();
     }
 
     private void OnDestroy() => DearImGuiInjectionCore.Dispose();
+
+    public void Debug(object data) => Logger.LogDebug(data);
+    public void Error(object data) => Logger.LogError(data);
+    public void Fatal(object data) => Logger.LogFatal(data);
+    public new void Info(object data) => Logger.LogInfo(data);
+    public void Message(object data) => Logger.LogMessage(data);
+    public void Warning(object data) => Logger.LogWarning(data);
 }

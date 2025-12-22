@@ -6,39 +6,23 @@ using SharpDX.Direct3D11;
 using SharpDX.DXGI;
 using SharpDX.Mathematics.Interop;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
-using ImDrawIdx = ushort;
-using BlendState = SharpDX.Direct3D11.BlendState;
 using Buffer = SharpDX.Direct3D11.Buffer;
 using Device = SharpDX.Direct3D11.Device;
+using ImDrawIdx = ushort;
 using MapFlags = SharpDX.Direct3D11.MapFlags;
-using System.Diagnostics;
 
 namespace DearImGuiInjection.Backends;
 
 internal static class ImGuiImplDX11
 {
-    private static Device _device;
-    private static DeviceContext _deviceContext;
-    private static SamplerState _fontSampler;
-    private static VertexShader _vertexShader;
-    private static PixelShader _pixelShader;
-    private static InputLayout _inputLayout;
-    private static Buffer _vertexConstantBuffer;
-    private static BlendState _blendState;
-    private static RasterizerState _rasterizerState;
-    private static DepthStencilState _depthStencilState;
-    private static Buffer _vertexBuffer;
-    private static Buffer _indexBuffer;
-    private static int _vertexBufferSize;
-    private static int _indexBufferSize;
-
-    // Perfomance
-    private static IntPtr _lastBoundTexId;
-    private static ShaderResourceView _lastBoundSrv;
+    private static int _nextId = 1;
+    private static readonly Dictionary<int, Data> _map = new();
 
     private const int D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE = 16;
     private static readonly RawRectangle[] _scissorRects = 
@@ -64,8 +48,26 @@ internal static class ImGuiImplDX11
     [StructLayout(LayoutKind.Sequential)]
     private struct Texture
     {
-        public IntPtr pTexture;
-        public IntPtr pTextureView;
+        public IntPtr pTexture; // Texture2D
+        public IntPtr pTextureView; // ShaderResourceView
+    }
+
+    private class Data
+    {
+        public Device Device;
+        public DeviceContext DeviceContext;
+        public SamplerState FontSampler;
+        public VertexShader VertexShader;
+        public PixelShader PixelShader;
+        public InputLayout InputLayout;
+        public Buffer VertexConstantBuffer;
+        public BlendState BlendState;
+        public RasterizerState RasterizerState;
+        public DepthStencilState DepthStencilState;
+        public Buffer VertexBuffer;
+        public Buffer IndexBuffer;
+        public int VertexBufferSize;
+        public int IndexBufferSize;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -115,9 +117,46 @@ internal static class ImGuiImplDX11
         public delegate void Delegate(ImDrawList* parent_list, ImDrawCmd* cmd);
     }
 
-    // Functions
-    static unsafe void SetupRenderState(ImDrawData* draw_data, DeviceContext device_ctx)
+    // Backend data stored in io.BackendRendererUserData to allow support for multiple Dear ImGui contexts
+    // It is STRONGLY preferred that you use docking branch with multi-viewports (== single Dear ImGui context + multiple windows) instead of multiple Dear ImGui contexts.
+    private unsafe static Data GetBackendData()
     {
+        var io = ImGui.GetIO();
+        if (io.BackendRendererUserData == null)
+            return null;
+        int id = Marshal.ReadInt32((IntPtr)io.BackendRendererUserData);
+        return _map.TryGetValue(id, out var data) ? data : null;
+    }
+
+    private unsafe static Data InitBackendData()
+    {
+        var io = ImGui.GetIO();
+        int id = _nextId++;
+        Data data = new Data();
+        _map[id] = data;
+        IntPtr ptr = Marshal.AllocHGlobal(sizeof(int));
+        Marshal.WriteInt32(ptr, id);
+        io.BackendRendererUserData = (void*)ptr;
+        return data;
+    }
+
+    private unsafe static void ClearBackendData()
+    {
+        var io = ImGui.GetIO();
+        if (io.BackendRendererUserData == null)
+            return;
+        IntPtr ptr = (IntPtr)io.BackendRendererUserData;
+        int id = Marshal.ReadInt32(ptr);
+        _map.Remove(id);
+        Marshal.FreeHGlobal(ptr);
+        io.BackendRendererUserData = null;
+    }
+
+    // Functions
+    private unsafe static void SetupRenderState(ImDrawData* draw_data, DeviceContext device_ctx)
+    {
+        Data bd = GetBackendData();
+
         // Setup viewport
         RawViewportF vp = new RawViewportF()
         {
@@ -132,7 +171,7 @@ internal static class ImGuiImplDX11
 
         // Setup orthographic projection matrix into our constant buffer
         // Our visible imgui space lies from draw_data->DisplayPos (top left) to draw_data->DisplayPos+data_data->DisplaySize (bottom right). DisplayPos is (0,0) for single viewport apps.
-        device_ctx.MapSubresource(_vertexConstantBuffer, MapMode.WriteDiscard, MapFlags.None, out var mapped_resource);
+        device_ctx.MapSubresource(bd.VertexConstantBuffer, MapMode.WriteDiscard, MapFlags.None, out var mapped_resource);
         VERTEX_CONSTANT_BUFFER_DX11* constant_buffer = (VERTEX_CONSTANT_BUFFER_DX11*)mapped_resource.DataPointer;
         float L = draw_data->DisplayPos.X;
         float R = draw_data->DisplayPos.X + draw_data->DisplaySize.X;
@@ -154,41 +193,42 @@ internal static class ImGuiImplDX11
         constant_buffer->mvp[13] = (T + B) / (B - T);
         constant_buffer->mvp[14] = 0.5f;
         constant_buffer->mvp[15] = 1.0f;
-        device_ctx.UnmapSubresource(_vertexConstantBuffer, 0);
+        device_ctx.UnmapSubresource(bd.VertexConstantBuffer, 0);
 
         // Setup shader and vertex buffers
-        device_ctx.InputAssembler.InputLayout = _inputLayout;
+        device_ctx.InputAssembler.InputLayout = bd.InputLayout;
         device_ctx.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding()
         {
             Stride = _imDrawVertSizeOf,
             Offset = 0,
-            Buffer = _vertexBuffer
+            Buffer = bd.VertexBuffer
         });
-        device_ctx.InputAssembler.SetIndexBuffer(_indexBuffer, Format.R16_UInt, 0);
+        device_ctx.InputAssembler.SetIndexBuffer(bd.IndexBuffer, Format.R16_UInt, 0);
         device_ctx.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
-        device_ctx.VertexShader.SetShader(_vertexShader, null, 0);
-        device_ctx.VertexShader.SetConstantBuffer(0, _vertexConstantBuffer);
-        device_ctx.PixelShader.SetShader(_pixelShader, null, 0);
-        device_ctx.PixelShader.SetSampler(0, _fontSampler);
+        device_ctx.VertexShader.SetShader(bd.VertexShader, null, 0);
+        device_ctx.VertexShader.SetConstantBuffer(0, bd.VertexConstantBuffer);
+        device_ctx.PixelShader.SetShader(bd.PixelShader, null, 0);
+        device_ctx.PixelShader.SetSampler(0, bd.FontSampler);
         device_ctx.GeometryShader.SetShader(null, null, 0);
         device_ctx.HullShader.SetShader(null, null, 0); // In theory we should backup and restore this as well.. very infrequently used..
         device_ctx.DomainShader.SetShader(null, null, 0); // In theory we should backup and restore this as well.. very infrequently used..
         device_ctx.ComputeShader.SetShader(null, null, 0); // In theory we should backup and restore this as well.. very infrequently used..
 
         // Setup blend state
-        device_ctx.OutputMerger.SetBlendState(_blendState, new(0.0f, 0.0f, 0.0f, 0.0f), 0xffffffff);
-        device_ctx.OutputMerger.SetDepthStencilState(_depthStencilState, 0);
-        device_ctx.Rasterizer.State = _rasterizerState;
+        device_ctx.OutputMerger.SetBlendState(bd.BlendState, new(0.0f, 0.0f, 0.0f, 0.0f), 0xffffffff);
+        device_ctx.OutputMerger.SetDepthStencilState(bd.DepthStencilState, 0);
+        device_ctx.Rasterizer.State = bd.RasterizerState;
     }
 
     // Render function
-    public static unsafe void RenderDrawData(ImDrawData* draw_data)
+    public unsafe static void RenderDrawData(ImDrawData* draw_data)
     {
         // Avoid rendering when minimized
         if (draw_data->DisplaySize.X <= 0.0f || draw_data->DisplaySize.Y <= 0.0f)
             return;
 
-        DeviceContext device = _deviceContext;
+        Data bd = GetBackendData();
+        DeviceContext device = bd.DeviceContext;
 
         // Catch up with texture updates. Most of the times, the list will have 1 element with an OK status, aka nothing to do.
         // (This almost always points to ImGui::GetPlatformIO().Textures[] but is part of ImDrawData to allow overriding or disabling texture updates).
@@ -203,35 +243,35 @@ internal static class ImGuiImplDX11
         }
 
         // Create and grow vertex/index buffers if needed
-        if (_vertexBuffer == null || _vertexBufferSize < draw_data->TotalVtxCount)
+        if (bd.VertexBuffer == null || bd.VertexBufferSize < draw_data->TotalVtxCount)
         {
-            _vertexBuffer?.Dispose();
-            _vertexBufferSize = draw_data->TotalVtxCount + 5000;
-            _vertexBuffer = new Buffer(_device, new BufferDescription
+            bd.VertexBuffer?.Dispose();
+            bd.VertexBufferSize = draw_data->TotalVtxCount + 5000;
+            bd.VertexBuffer = new Buffer(bd.Device, new BufferDescription
             {
                 Usage = ResourceUsage.Dynamic,
-                SizeInBytes = _vertexBufferSize * _imDrawVertSizeOf,
+                SizeInBytes = bd.VertexBufferSize * _imDrawVertSizeOf,
                 BindFlags = BindFlags.VertexBuffer,
                 CpuAccessFlags = CpuAccessFlags.Write
             });
         }
 
-        if (_indexBuffer == null || _indexBufferSize < draw_data->TotalIdxCount)
+        if (bd.IndexBuffer == null || bd.IndexBufferSize < draw_data->TotalIdxCount)
         {
-            _indexBuffer?.Dispose();
-            _indexBufferSize = draw_data->TotalIdxCount + 10000;
-            _indexBuffer = new Buffer(_device, new BufferDescription
+            bd.IndexBuffer?.Dispose();
+            bd.IndexBufferSize = draw_data->TotalIdxCount + 10000;
+            bd.IndexBuffer = new Buffer(bd.Device, new BufferDescription
             {
                 Usage = ResourceUsage.Dynamic,
-                SizeInBytes = _indexBufferSize * _imDrawIdxSizeOf,
+                SizeInBytes = bd.IndexBufferSize * _imDrawIdxSizeOf,
                 BindFlags = BindFlags.IndexBuffer,
                 CpuAccessFlags = CpuAccessFlags.Write
             });
         }
 
         // Upload vertex/index data into a single contiguous GPU buffer
-        device.MapSubresource(_vertexBuffer, MapMode.WriteDiscard, MapFlags.None, out DataStream vtx_resource);
-        device.MapSubresource(_indexBuffer, MapMode.WriteDiscard, MapFlags.None, out DataStream idx_resource);
+        device.MapSubresource(bd.VertexBuffer, MapMode.WriteDiscard, MapFlags.None, out DataStream vtx_resource);
+        device.MapSubresource(bd.IndexBuffer, MapMode.WriteDiscard, MapFlags.None, out DataStream idx_resource);
         ImDrawVert* vtx_dst = (ImDrawVert*)vtx_resource.DataPointer;
         ImDrawIdx* idx_dst = (ImDrawIdx*)idx_resource.DataPointer;
         for (int n = 0; n < draw_data->CmdListsCount; n++)
@@ -244,8 +284,8 @@ internal static class ImGuiImplDX11
             vtx_dst += cmd_list->VtxBuffer.Size;
             idx_dst += cmd_list->IdxBuffer.Size;
         }
-        device.UnmapSubresource(_vertexBuffer, 0);
-        device.UnmapSubresource(_indexBuffer, 0);
+        device.UnmapSubresource(bd.VertexBuffer, 0);
+        device.UnmapSubresource(bd.IndexBuffer, 0);
 
         // Backup DX state that will be modified to restore it afterwards (unfortunately this is very ugly looking and verbose. Close your eyes!)
         BACKUP_DX11_STATE old = new BACKUP_DX11_STATE()
@@ -276,10 +316,10 @@ internal static class ImGuiImplDX11
         // Setup render state structure (for callbacks and custom texture bindings)
         var platform_io = ImGui.GetPlatformIO();
         RenderState renderState;
-        renderState.Device = _device.NativePointer;
-        renderState.DeviceContext = _deviceContext.NativePointer;
-        renderState.SamplerDefault = _fontSampler.NativePointer;
-        renderState.VertexConstantBuffer = _vertexConstantBuffer.NativePointer;
+        renderState.Device = bd.Device.NativePointer;
+        renderState.DeviceContext = bd.DeviceContext.NativePointer;
+        renderState.SamplerDefault = bd.FontSampler.NativePointer;
+        renderState.VertexConstantBuffer = bd.VertexConstantBuffer.NativePointer;
         platform_io.RendererRenderState = &renderState;
 
         // Render command lists
@@ -318,13 +358,7 @@ internal static class ImGuiImplDX11
                     device.Rasterizer.SetScissorRectangle((int)clip_min.X, (int)clip_min.Y, (int)clip_max.X, (int)clip_max.Y);
 
                     // Bind texture, Draw
-                    IntPtr texture_id = pcmd.GetTexID();
-                    if (texture_id != _lastBoundTexId)
-                    {
-                        _lastBoundTexId = texture_id;
-                        _lastBoundSrv = texture_id == IntPtr.Zero ? null : new(texture_id);
-                    }
-                    device.PixelShader.SetShaderResource(0, _lastBoundSrv);
+                    device.PixelShader.SetShaderResource(0, new(pcmd.GetTexID()));
                     device.DrawIndexed((int)pcmd.ElemCount, (int)(pcmd.IdxOffset + global_idx_offset), (int)(pcmd.VtxOffset + global_vtx_offset));
                 }
             }
@@ -351,7 +385,7 @@ internal static class ImGuiImplDX11
         device.InputAssembler.InputLayout = old.InputLayout;
     }
 
-    private static unsafe void DestroyTexture(ImTextureData* tex)
+    private unsafe static void DestroyTexture(ImTextureData* tex)
     {
         Texture* backend_tex = (Texture*)tex->BackendUserData;
         if (backend_tex == null)
@@ -367,8 +401,9 @@ internal static class ImGuiImplDX11
         tex->BackendUserData = null;
     }
 
-    private static unsafe void UpdateTexture(ImTextureData* tex)
+    private unsafe static void UpdateTexture(ImTextureData* tex)
     {
+        Data bd = GetBackendData();
         if (tex->Status == ImTextureStatus.WantCreate)
         {
             // Create and upload new texture to graphics system
@@ -389,7 +424,7 @@ internal static class ImGuiImplDX11
             desc.Usage = ResourceUsage.Default;
             desc.BindFlags = BindFlags.ShaderResource;
             desc.CpuAccessFlags = CpuAccessFlags.None;
-            Texture2D texture2D = new(_device, desc, new DataRectangle(pixels, desc.Width * 4));
+            Texture2D texture2D = new(bd.Device, desc, new DataRectangle(pixels, desc.Width * 4));
             Debug.Assert(texture2D != null, "Backend failed to create texture!");
             backend_tex->pTexture = texture2D.NativePointer;
             Marshal.AddRef(backend_tex->pTexture);
@@ -400,7 +435,7 @@ internal static class ImGuiImplDX11
             srvDesc.Dimension = ShaderResourceViewDimension.Texture2D;
             srvDesc.Texture2D.MipLevels = desc.MipLevels;
             srvDesc.Texture2D.MostDetailedMip = 0;
-            ShaderResourceView shaderResourceView = new(_device, texture2D, srvDesc);
+            ShaderResourceView shaderResourceView = new(bd.Device, texture2D, srvDesc);
             Debug.Assert(shaderResourceView != null, "Backend failed to create texture!");
             backend_tex->pTextureView = shaderResourceView.NativePointer;
             Marshal.AddRef(backend_tex->pTextureView);
@@ -429,7 +464,7 @@ internal static class ImGuiImplDX11
                     Bottom = r.Y + r.H,
                     Back = 1
                 };
-                _deviceContext.UpdateSubresource(texture2D, 0, box, (IntPtr)tex->GetPixelsAt(r.X, r.Y), tex->GetPitch(), 0);
+                bd.DeviceContext.UpdateSubresource(texture2D, 0, box, (IntPtr)tex->GetPixelsAt(r.X, r.Y), tex->GetPitch(), 0);
             }
             tex->SetStatus(ImTextureStatus.Ok);
         }
@@ -437,9 +472,10 @@ internal static class ImGuiImplDX11
             DestroyTexture(tex);
     }
 
-    public static unsafe bool CreateDeviceObjects()
+    public static bool CreateDeviceObjects()
     {
-        if (_device == null)
+        Data bd = GetBackendData();
+        if (bd.Device == null)
             return false;
         InvalidateDeviceObjects();
 
@@ -485,14 +521,14 @@ internal static class ImGuiImplDX11
             vertexShaderBlob?.Dispose();
             return false;
         }
-        _vertexShader = new VertexShader(_device, vertexShaderBlob.Bytecode);
+        bd.VertexShader = new VertexShader(bd.Device, vertexShaderBlob.Bytecode);
 
         // Create the input layout
-        _inputLayout = new InputLayout(_device, vertexShaderBlob.Bytecode, _inputElements);
-        vertexShaderBlob?.Dispose();
+        bd.InputLayout = new InputLayout(bd.Device, vertexShaderBlob.Bytecode, _inputElements);
+        vertexShaderBlob.Dispose();
 
         // Create the constant buffer
-        _vertexConstantBuffer = new Buffer(_device, new BufferDescription
+        bd.VertexConstantBuffer = new Buffer(bd.Device, new BufferDescription
         {
             SizeInBytes = _vertexConstantBufferSizeOf,
             Usage = ResourceUsage.Dynamic,
@@ -524,8 +560,8 @@ internal static class ImGuiImplDX11
             pixelShaderBlob?.Dispose();
             return false;
         }
-        _pixelShader = new PixelShader(_device, pixelShaderBlob.Bytecode);
-        pixelShaderBlob?.Dispose();
+        bd.PixelShader = new PixelShader(bd.Device, pixelShaderBlob.Bytecode);
+        pixelShaderBlob.Dispose();
 
         // Create the blending setup
         var blendStateDesc = new BlendStateDescription
@@ -540,10 +576,10 @@ internal static class ImGuiImplDX11
         blendStateDesc.RenderTarget[0].DestinationAlphaBlend = BlendOption.InverseSourceAlpha;
         blendStateDesc.RenderTarget[0].AlphaBlendOperation = BlendOperation.Add;
         blendStateDesc.RenderTarget[0].RenderTargetWriteMask = ColorWriteMaskFlags.All;
-        _blendState = new BlendState(_device, blendStateDesc);
+        bd.BlendState = new BlendState(bd.Device, blendStateDesc);
 
         // Create the rasterizer state
-        _rasterizerState = new RasterizerState(_device, new RasterizerStateDescription
+        bd.RasterizerState = new RasterizerState(bd.Device, new RasterizerStateDescription
         {
             FillMode = FillMode.Solid,
             CullMode = CullMode.None,
@@ -552,7 +588,7 @@ internal static class ImGuiImplDX11
         });
 
         // Create depth-stencil State
-        _depthStencilState = new DepthStencilState(_device, new DepthStencilStateDescription
+        bd.DepthStencilState = new DepthStencilState(bd.Device, new DepthStencilStateDescription
         {
             IsDepthEnabled = false,
             DepthWriteMask = DepthWriteMask.All,
@@ -576,7 +612,7 @@ internal static class ImGuiImplDX11
 
         // Create texture sampler
         // (Bilinear sampling is required by default. Set 'io.Fonts->Flags |= ImFontAtlasFlags_NoBakedLines' or 'style.AntiAliasedLinesUseTex = false' to allow point/nearest sampling)
-        _fontSampler = new SamplerState(_device, new SamplerStateDescription
+        bd.FontSampler = new SamplerState(bd.Device, new SamplerStateDescription
         {
             Filter = Filter.MinMagMipLinear,
             AddressU = TextureAddressMode.Clamp,
@@ -591,9 +627,10 @@ internal static class ImGuiImplDX11
         return true;
     }
 
-    public static unsafe void InvalidateDeviceObjects()
+    public unsafe static void InvalidateDeviceObjects()
     {
-        if (_device == null)
+        Data bd = GetBackendData();
+        if (bd.Device == null)
             return;
 
         // Destroy all textures
@@ -605,61 +642,69 @@ internal static class ImGuiImplDX11
                 DestroyTexture(tex);
         }
 
-        _fontSampler?.Dispose();
-        _fontSampler = null;
-        _vertexBuffer?.Dispose();
-        _vertexBuffer = null;
-        _indexBuffer?.Dispose();
-        _indexBuffer = null;
-        _blendState?.Dispose();
-        _blendState = null;
-        _depthStencilState?.Dispose();
-        _depthStencilState = null;
-        _rasterizerState?.Dispose();
-        _rasterizerState = null;
-        _pixelShader?.Dispose();
-        _pixelShader = null;
-        _vertexConstantBuffer?.Dispose();
-        _vertexConstantBuffer = null;
-        _inputLayout?.Dispose();
-        _inputLayout = null;
-        _vertexShader?.Dispose();
-        _vertexShader = null;
+        bd.FontSampler?.Dispose();
+        bd.FontSampler = null;
+        bd.VertexBuffer?.Dispose();
+        bd.VertexBuffer = null;
+        bd.IndexBuffer?.Dispose();
+        bd.IndexBuffer = null;
+        bd.BlendState?.Dispose();
+        bd.BlendState = null;
+        bd.DepthStencilState?.Dispose();
+        bd.DepthStencilState = null;
+        bd.RasterizerState?.Dispose();
+        bd.RasterizerState = null;
+        bd.PixelShader?.Dispose();
+        bd.PixelShader = null;
+        bd.VertexConstantBuffer?.Dispose();
+        bd.VertexConstantBuffer = null;
+        bd.InputLayout?.Dispose();
+        bd.InputLayout = null;
+        bd.VertexShader?.Dispose();
+        bd.VertexShader = null;
     }
 
-    internal static unsafe void Init(IntPtr device, IntPtr deviceContext)
+    internal unsafe static void Init(IntPtr device, IntPtr device_context)
     {
         var io = ImGui.GetIO();
+        Debug.Assert(io.BackendRendererUserData == null, "Already initialized a renderer backend!");
 
         // Setup backend capabilities flags
+        Data bd = InitBackendData();
         io.BackendRendererName = (byte*)Marshal.StringToHGlobalAnsi("imgui_impl_dx11_c#");
         io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
         io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;   // We can honor ImGuiPlatformIO::Textures[] requests during render.
 
         var platform_io = ImGui.GetPlatformIO();
         platform_io.RendererTextureMaxWidth = platform_io.RendererTextureMaxHeight = Texture2D.MaximumTexture2DSize;
-        
-        _device = new(device);
-        _deviceContext = new(deviceContext);
+
+        bd.Device = new(device);
+        bd.DeviceContext = new(device_context);
     }
 
-    public static unsafe void Shutdown()
+    public unsafe static void Shutdown()
     {
+        Data bd = GetBackendData();
+        Debug.Assert(bd != null, "No renderer backend to shutdown, or already shutdown?");
+
         InvalidateDeviceObjects();
 
         // we don't own these, so no Dispose()
-        _device = null;
-        _deviceContext = null;
+        bd.Device = null;
+        bd.DeviceContext = null;
 
         var io = ImGui.GetIO();
-        Marshal.FreeHGlobal((IntPtr)io.Handle->BackendRendererName);
+        Marshal.FreeHGlobal((IntPtr)io.BackendRendererName);
         io.BackendFlags &= ~ImGuiBackendFlags.RendererHasVtxOffset;
         io.BackendFlags &= ~ImGuiBackendFlags.RendererHasTextures;
+        ClearBackendData();
     }
 
     public static void NewFrame()
     {
-        if (_vertexShader == null)
+        Data bd = GetBackendData();
+        Debug.Assert(bd != null, "Context or backend not initialized! Did you call ImGui_ImplDX11_Init()?");
+        if (bd.VertexShader == null)
             if (!CreateDeviceObjects())
                 Debug.Assert(false, "ImGui_ImplDX11_CreateDeviceObjects() failed!");
     }

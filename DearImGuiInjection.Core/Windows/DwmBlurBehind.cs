@@ -3,6 +3,14 @@ using System.Runtime.InteropServices;
 
 namespace DearImGuiInjection.Windows;
 
+[Flags]
+internal enum DwmBlurBehindFlags
+{
+    Enable = 1,
+    BlurRegion = 2,
+    TransitionMaximized = 4
+}
+
 [StructLayout(LayoutKind.Sequential)]
 internal struct DwmBlurBehind
 {

@@ -1,6 +1,6 @@
 ﻿namespace DearImGuiInjection.BepInEx5;
 
-internal static class Metadata
+public static class DearImGuiInjectionMetadata
 {
     public const string GUID = Author + "." + Name;
     public const string Author = "iDeathHD";

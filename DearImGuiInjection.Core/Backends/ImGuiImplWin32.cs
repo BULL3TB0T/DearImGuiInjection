@@ -9,30 +9,87 @@ using System.Runtime.InteropServices;
 
 namespace DearImGuiInjection.Backends;
 
-internal static unsafe class ImGuiImplWin32
+internal static class ImGuiImplWin32
 {
-    private static IntPtr _windowHandle;
-    private static IntPtr _mouseHandle;
-    private static int _mouseTrackedArea;   // 0: not tracked, 1: client are, 2: non-client area
-    private static int _mouseButtonsDown;
-    private static long _time;
-    private static long _ticksPerSecond;
-    private static ImGuiMouseCursor _lastMouseCursor;
+    private static int _nextId = 1;
+    private static readonly Dictionary<int, Data> _map = new();
 
-    private static bool _hasGamepad;
-    private static bool _wantUpdateHasGamepad;
-    private static IntPtr _xInputDLL;
-    private static XInputGetCapabilitiesDelegate _xInputGetCapabilities;
-    private static XInputGetStateDelegate _xInputGetState;
+    private class Data
+    {
+        public IntPtr Hwnd;
+        public IntPtr MouseHwnd;
+        public int MouseTrackedArea;   // 0: not tracked, 1: client area, 2: non-client area
+        public int MouseButtonsDown;
+        public long Time;
+        public long TicksPerSecond;
+        public ImGuiMouseCursor LastMouseCursor;
+        public uint KeyboardCodePage;
+        public bool HasGamepad;
+        public bool WantUpdateHasGamepad;
+        public IntPtr XInputDLL;
+        public XInputGetCapabilitiesDelegate XInputGetCapabilities;
+        public XInputGetStateDelegate XInputGetState;
+    }
 
-    public static bool Init(IntPtr windowHandle)
+    // Backend data stored in io.BackendPlatformUserData to allow support for multiple Dear ImGui contexts
+    // It is STRONGLY preferred that you use docking branch with multi-viewports (== single Dear ImGui context + multiple windows) instead of multiple Dear ImGui contexts.
+    // FIXME: multi-context support is not well tested and probably dysfunctional in this backend.
+    // FIXME: some shared resources (mouse cursor shape, gamepad) are mishandled when using multi-context.
+    private unsafe static Data GetBackendData()
     {
         var io = ImGui.GetIO();
-        if (_windowHandle != IntPtr.Zero)
-        {
-            Log.Error("Already initialized a platform backend!");
-            return false;
-        }
+        if (io.BackendPlatformUserData == null)
+            return null;
+        int id = Marshal.ReadInt32((IntPtr)io.BackendPlatformUserData);
+        return _map.TryGetValue(id, out var data) ? data : null;
+    }
+    private unsafe static Data GetBackendData(ImGuiIOPtr io)
+    {
+        if (io.BackendPlatformUserData == null)
+            return null;
+        int id = Marshal.ReadInt32((IntPtr)io.BackendPlatformUserData);
+        return _map.TryGetValue(id, out var data) ? data : null;
+    }
+
+    private unsafe static Data InitBackendData()
+    {
+        var io = ImGui.GetIO();
+        int id = _nextId++;
+        Data data = new Data();
+        _map[id] = data;
+        IntPtr ptr = Marshal.AllocHGlobal(sizeof(int));
+        Marshal.WriteInt32(ptr, id);
+        io.BackendPlatformUserData = (void*)ptr;
+        return data;
+    }
+
+    private unsafe static void ClearBackendData()
+    {
+        var io = ImGui.GetIO();
+        if (io.BackendPlatformUserData == null)
+            return;
+        IntPtr ptr = (IntPtr)io.BackendPlatformUserData;
+        int id = Marshal.ReadInt32(ptr);
+        _map.Remove(id);
+        Marshal.FreeHGlobal(ptr);
+        io.BackendPlatformUserData = null;
+    }
+
+    // Functions
+    private unsafe static void UpdateKeyboardCodePage()
+    {
+        // Retrieve keyboard code page, required for handling of non-Unicode Windows.
+        Data bd = GetBackendData();
+        IntPtr keyboard_layout = User32.GetKeyboardLayout(0);
+        uint keyboard_lcid = MAKELCID(HIWORD(keyboard_layout), User32.SORT_DEFAULT);
+        if (User32.GetLocaleInfoA(keyboard_lcid, User32.LOCALE_RETURN_NUMBER | User32.LOCALE_IDEFAULTANSICODEPAGE, (IntPtr)bd.KeyboardCodePage, sizeof(uint)) == 0)
+            bd.KeyboardCodePage = User32.CP_ACP; // Fallback to default ANSI code page when fails.
+    }
+
+    public unsafe static bool Init(IntPtr hwnd, bool platform_has_own_dc = false)
+    {
+        var io = ImGui.GetIO();
+        Debug.Assert(io.BackendPlatformUserData == null, "Already initialized a platform backend!");
 
         if (!Kernel32.QueryPerformanceFrequency(out var perf_frequency))
             return false;
@@ -40,21 +97,24 @@ internal static unsafe class ImGuiImplWin32
             return false;
 
         // Setup backend capabilities flags
-        io.Handle->BackendPlatformName = (byte*)Marshal.StringToHGlobalAnsi("imgui_impl_win32_c#");
+        Data bd = InitBackendData();
+        io.BackendPlatformName = (byte*)Marshal.StringToHGlobalAnsi("imgui_impl_win32_c#");
         io.BackendFlags |= ImGuiBackendFlags.HasMouseCursors;         // We can honor GetMouseCursor() values (optional)
         io.BackendFlags |= ImGuiBackendFlags.HasSetMousePos;          // We can honor io.WantSetMousePos requests (optional, rarely used)
 
-        _windowHandle = windowHandle;
-        _ticksPerSecond = perf_frequency;
-        _time = perf_counter;
-        _lastMouseCursor = ImGuiMouseCursor.Count;
+        bd.Hwnd = hwnd;
+        bd.TicksPerSecond = perf_frequency;
+        bd.Time = perf_counter;
+        bd.LastMouseCursor = ImGuiMouseCursor.Count;
+        UpdateKeyboardCodePage();
 
         // Set platform dependent data in viewport
         ImGuiViewportPtr main_viewport = ImGui.GetMainViewport();
-        main_viewport.PlatformHandle = main_viewport.PlatformHandleRaw = (void*)windowHandle;
+        main_viewport.PlatformHandle = main_viewport.PlatformHandleRaw = (void*)bd.Hwnd;
+        _ = platform_has_own_dc; // Used in 'docking' branch
 
         // Dynamically load XInput library
-        _wantUpdateHasGamepad = true;
+        bd.WantUpdateHasGamepad = true;
         var xinput_dll_names = new List<string>()
         {
             "xinput1_4.dll",   // Windows 8+
@@ -68,9 +128,9 @@ internal static unsafe class ImGuiImplWin32
             var dll = Kernel32.LoadLibrary(xinput_dll_names[n]);
             if (dll != IntPtr.Zero)
             {
-                _xInputDLL = dll;
-                _xInputGetCapabilities = Marshal.GetDelegateForFunctionPointer<XInputGetCapabilitiesDelegate>(Kernel32.GetProcAddress(dll, "XInputGetCapabilities"));
-                _xInputGetState = Marshal.GetDelegateForFunctionPointer<XInputGetStateDelegate>(Kernel32.GetProcAddress(dll, "XInputGetState"));
+                bd.XInputDLL = dll;
+                bd.XInputGetCapabilities = Marshal.GetDelegateForFunctionPointer<XInputGetCapabilitiesDelegate>(Kernel32.GetProcAddress(dll, "XInputGetCapabilities"));
+                bd.XInputGetState = Marshal.GetDelegateForFunctionPointer<XInputGetStateDelegate>(Kernel32.GetProcAddress(dll, "XInputGetState"));
                 break;
             }
         }
@@ -78,27 +138,22 @@ internal static unsafe class ImGuiImplWin32
         return true;
     }
 
-    public static void Shutdown()
+    public unsafe static void Shutdown()
     {
-        if (_windowHandle == IntPtr.Zero)
-        {
-            Log.Error("No platform backend to shutdown, or already shutdown?");
-            return;
-        }
-
+        Data bd = GetBackendData();
+        Debug.Assert(bd != null, "No platform backend to shutdown, or already shutdown?");
         var io = ImGui.GetIO();
 
         // Unload XInput library
-        if (_xInputDLL != IntPtr.Zero)
-            Kernel32.FreeLibrary(_xInputDLL);
+        if (bd.XInputDLL != IntPtr.Zero)
+            Kernel32.FreeLibrary(bd.XInputDLL);
 
-        Marshal.FreeHGlobal((IntPtr)io.Handle->BackendPlatformName);
+        Marshal.FreeHGlobal((IntPtr)io.BackendPlatformName);
         io.BackendFlags &= ~(ImGuiBackendFlags.HasMouseCursors | ImGuiBackendFlags.HasSetMousePos | ImGuiBackendFlags.HasGamepad);
     }
 
-    public static bool UpdateMouseCursor(ImGuiMouseCursor imgui_cursor)
+    private static bool UpdateMouseCursor(ImGuiIOPtr io, ImGuiMouseCursor imgui_cursor)
     {
-        var io = ImGui.GetIO();
         if ((io.ConfigFlags & ImGuiConfigFlags.NoMouseCursorChange) != 0)
             return false;
 
@@ -142,90 +197,90 @@ internal static unsafe class ImGuiImplWin32
         return true;
     }
 
-    public static bool IsVkDown(VirtualKey vk) => (User32.GetKeyState(vk) & 0x8000) != 0;
+    private static bool IsVkDown(VirtualKey vk) => (User32.GetKeyState(vk) & 0x8000) != 0;
 
-    public static void AddKeyEvent(ImGuiKey key, bool down, VirtualKey native_keycode, int native_scancode = -1)
+    private static void AddKeyEvent(ImGuiIOPtr io, ImGuiKey key, bool down, VirtualKey native_keycode, int native_scancode = -1)
     {
-        var io = ImGui.GetIO();
         io.AddKeyEvent(key, down);
         io.SetKeyEventNativeData(key, (int)native_keycode, native_scancode); // To support legacy indexing (<1.87 user code)
     }
 
-    public static void ProcessKeyEventsWorkarounds()
+    private static void ProcessKeyEventsWorkarounds(ImGuiIOPtr io)
     {
         // Left & right Shift keys: when both are pressed together, Windows tend to not generate the WM_KEYUP event for the first released one.
         if (ImGui.IsKeyDown(ImGuiKey.LeftShift) && !IsVkDown(VirtualKey.VK_LSHIFT))
-            AddKeyEvent(ImGuiKey.LeftShift, false, VirtualKey.VK_LSHIFT);
+            AddKeyEvent(io, ImGuiKey.LeftShift, false, VirtualKey.VK_LSHIFT);
         if (ImGui.IsKeyDown(ImGuiKey.RightShift) && !IsVkDown(VirtualKey.VK_RSHIFT))
-            AddKeyEvent(ImGuiKey.RightShift, false, VirtualKey.VK_RSHIFT);
+            AddKeyEvent(io, ImGuiKey.RightShift, false, VirtualKey.VK_RSHIFT);
 
         // Sometimes WM_KEYUP for Win key is not passed down to the app (e.g. for Win+V on some setups, according to GLFW).
         if (ImGui.IsKeyDown(ImGuiKey.LeftSuper) && !IsVkDown(VirtualKey.VK_LWIN))
-            AddKeyEvent(ImGuiKey.LeftSuper, false, VirtualKey.VK_LWIN);
+            AddKeyEvent(io, ImGuiKey.LeftSuper, false, VirtualKey.VK_LWIN);
         if (ImGui.IsKeyDown(ImGuiKey.RightSuper) && !IsVkDown(VirtualKey.VK_RWIN))
-            AddKeyEvent(ImGuiKey.RightSuper, false, VirtualKey.VK_RWIN);
+            AddKeyEvent(io, ImGuiKey.RightSuper, false, VirtualKey.VK_RWIN);
     }
 
-    public static void UpdateKeyModifiers()
+    private static void UpdateKeyModifiers(ImGuiIOPtr io)
     {
-        var io = ImGui.GetIO();
         io.AddKeyEvent(ImGuiKey.ModCtrl, IsVkDown(VirtualKey.VK_CONTROL));
         io.AddKeyEvent(ImGuiKey.ModShift, IsVkDown(VirtualKey.VK_SHIFT));
         io.AddKeyEvent(ImGuiKey.ModAlt, IsVkDown(VirtualKey.VK_MENU));
         io.AddKeyEvent(ImGuiKey.ModSuper, IsVkDown(VirtualKey.VK_LWIN) || IsVkDown(VirtualKey.VK_RWIN));
     }
 
-    public static void UpdateMouseData()
+    private static void UpdateMouseData(ImGuiIOPtr io)
     {
-        var io = ImGui.GetIO();
+        Data bd = GetBackendData(io);
+        Debug.Assert(bd.Hwnd != IntPtr.Zero);
 
         IntPtr focused_window = User32.GetForegroundWindow();
-        bool is_app_focused = focused_window == _windowHandle;
+        bool is_app_focused = focused_window == bd.Hwnd;
         if (is_app_focused)
         {
             // (Optional) Set OS mouse position from Dear ImGui if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
             if (io.WantSetMousePos)
             {
                 POINT pos = new POINT((int)io.MousePos.X, (int)io.MousePos.Y);
-                if (User32.ClientToScreen(_windowHandle, ref pos))
+                if (User32.ClientToScreen(bd.Hwnd, ref pos))
                     User32.SetCursorPos(pos.X, pos.Y);
             }
 
             // (Optional) Fallback to provide mouse position when focused (WM_MOUSEMOVE already provides this when hovered or captured)
             // This also fills a short gap when clicking non-client area: WM_NCMOUSELEAVE -> modal OS move -> gap -> WM_NCMOUSEMOVE
-            if (!io.WantSetMousePos && _mouseTrackedArea == 0)
+            if (!io.WantSetMousePos && bd.MouseTrackedArea == 0)
             {
                 POINT pos;
-                if (User32.GetCursorPos(out pos) && User32.ScreenToClient(_windowHandle, ref pos))
+                if (User32.GetCursorPos(out pos) && User32.ScreenToClient(bd.Hwnd, ref pos))
                     io.AddMousePosEvent(pos.X, pos.Y);
             }
         }
     }
 
     // Gamepad navigation mapping
-    public static void UpdateGamepads()
+    private static void UpdateGamepads(ImGuiIOPtr io)
     {
+        if ((io.ConfigFlags & ImGuiConfigFlags.NavEnableGamepad) == 0)
+            return;
+
         const uint ERROR_SUCCESS = 0;
         const uint XINPUT_FLAG_GAMEPAD = 1;
         const int XINPUT_GAMEPAD_TRIGGER_THRESHOLD = 30;
         const int XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE = 7849;
 
-        var io = ImGui.GetIO();
-        if ((io.ConfigFlags & ImGuiConfigFlags.NavEnableGamepad) == 0)
-            return;
+        Data bd = GetBackendData(io);
 
         // Calling XInputGetState() every frame on disconnected gamepads is unfortunately too slow.
         // Instead we refresh gamepad availability by calling XInputGetCapabilities() _only_ after receiving WM_DEVICECHANGE.
-        if (_wantUpdateHasGamepad)
+        if (bd.WantUpdateHasGamepad)
         {
             XINPUT_CAPABILITIES caps = default;
-            _hasGamepad = _xInputGetCapabilities != null
-                && (_xInputGetCapabilities(0, XINPUT_FLAG_GAMEPAD, out caps) == ERROR_SUCCESS);
-            _wantUpdateHasGamepad = false;
+            bd.HasGamepad = bd.XInputGetCapabilities != null
+                && (bd.XInputGetCapabilities(0, XINPUT_FLAG_GAMEPAD, out caps) == ERROR_SUCCESS);
+            bd.WantUpdateHasGamepad = false;
         }
 
         io.BackendFlags &= ~ImGuiBackendFlags.HasGamepad;
-        if (!_hasGamepad || _xInputGetState == null || _xInputGetState(0, out XINPUT_STATE xinput_state) != ERROR_SUCCESS)
+        if (!bd.HasGamepad || bd.XInputGetState == null || bd.XInputGetState(0, out XINPUT_STATE xinput_state) != ERROR_SUCCESS)
             return;
         io.BackendFlags |= ImGuiBackendFlags.HasGamepad;
         XINPUT_GAMEPAD gamepad = xinput_state.Gamepad;
@@ -261,39 +316,42 @@ internal static unsafe class ImGuiImplWin32
 
     public static void NewFrame()
     {
+        Data bd = GetBackendData();
+        Debug.Assert(bd != null, "Context or backend not initialized? Did you call ImGui_ImplWin32_Init()?");
         var io = ImGui.GetIO();
 
         // Setup display size (every frame to accommodate for window resizing)
-        User32.GetClientRect(_windowHandle, out var rect);
+        User32.GetClientRect(bd.Hwnd, out var rect);
         io.DisplaySize = new Vector2(rect.Right - rect.Left, rect.Bottom - rect.Top);
 
         // Setup time step
         Kernel32.QueryPerformanceCounter(out var current_time);
-        io.DeltaTime = (float)(current_time - _time) / _ticksPerSecond;
-        _time = current_time;
+        io.DeltaTime = (float)(current_time - bd.Time) / bd.TicksPerSecond;
+        bd.Time = current_time;
 
         // Update OS mouse position
-        UpdateMouseData();
+        UpdateMouseData(io);
 
         // Process workarounds for known Windows key handling issues
-        ProcessKeyEventsWorkarounds();
+        ProcessKeyEventsWorkarounds(io);
 
         // Update OS mouse cursor with the cursor requested by imgui
         ImGuiMouseCursor mouse_cursor = io.MouseDrawCursor ? ImGuiMouseCursor.None : ImGui.GetMouseCursor();
-        if (_lastMouseCursor != mouse_cursor)
+        if (bd.LastMouseCursor != mouse_cursor)
         {
-            _lastMouseCursor = mouse_cursor;
-            UpdateMouseCursor(mouse_cursor);
+            bd.LastMouseCursor = mouse_cursor;
+            UpdateMouseCursor(io, mouse_cursor);
         }
 
         // Update game controllers (if enabled and available)
-        UpdateGamepads();
+        UpdateGamepads(io);
     }
 
     // Map VK_xxx to ImGuiKey_xxx.
-    public static ImGuiKey KeyEventToImGuiKey(VirtualKey wParam, IntPtr lParam)
+    private static ImGuiKey KeyEventToImGuiKey(VirtualKey wParam, IntPtr lParam)
     {
         const int KF_EXTENDED = 0x0100;
+        // There is no distinct VK_xxx for keypad enter, instead it is VK_RETURN + KF_EXTENDED.
         if ((wParam == VirtualKey.VK_RETURN) && ((HIWORD(lParam) & KF_EXTENDED) != 0))
             return ImGuiKey.KeypadEnter;
 
@@ -446,7 +504,7 @@ internal static unsafe class ImGuiImplWin32
     // Helper to obtain the source of mouse messages.
     // See https://learn.microsoft.com/en-us/windows/win32/tablet/system-events-and-mouse-messages
     // Prefer to call this at the top of the message handler to avoid the possibility of other Win32 calls interfering with this.
-    public static ImGuiMouseSource GetMouseSourceFromMessageExtraInfo()
+    private static ImGuiMouseSource GetMouseSourceFromMessageExtraInfo()
     {
         var extra_info = (uint)User32.GetMessageExtraInfo();
         if ((extra_info & 0xFFFFFF80) == 0xFF515700)
@@ -456,32 +514,31 @@ internal static unsafe class ImGuiImplWin32
         return ImGuiMouseSource.Mouse;
     }
 
-    public static int GET_X_LPARAM(IntPtr lp) => unchecked((short)(long)lp);
-    public static int GET_Y_LPARAM(IntPtr lp) => unchecked((short)((long)lp >> 16));
+    private static uint MAKELCID(ushort lgid, uint srtid) => unchecked((uint)(((uint)(ushort)srtid << 16) | (uint)lgid));
+    private static int GET_X_LPARAM(IntPtr lp) => unchecked((short)(long)lp);
+    private static int GET_Y_LPARAM(IntPtr lp) => unchecked((short)((long)lp >> 16));
 
-    public static ushort HIWORD(IntPtr dwValue) => unchecked((ushort)((long)dwValue >> 16));
-    public static ushort HIWORD(UIntPtr dwValue) => unchecked((ushort)((ulong)dwValue >> 16));
+    private static ushort HIWORD(IntPtr dwValue) => unchecked((ushort)((long)dwValue >> 16));
+    private static ushort HIWORD(UIntPtr dwValue) => unchecked((ushort)((ulong)dwValue >> 16));
 
-    public static ushort LOWORD(IntPtr dwValue) => unchecked((ushort)(long)dwValue);
+    private static ushort LOWORD(IntPtr dwValue) => unchecked((ushort)(long)dwValue);
 
-    public static ushort GET_XBUTTON_WPARAM(IntPtr wParam) => HIWORD(wParam);
+    private static ushort GET_XBUTTON_WPARAM(IntPtr wParam) => HIWORD(wParam);
 
-    public static int GET_WHEEL_DELTA_WPARAM(IntPtr wParam) => (short)HIWORD(wParam);
+    private static int GET_WHEEL_DELTA_WPARAM(IntPtr wParam) => (short)HIWORD(wParam);
 
-    public static byte LOBYTE(ushort wValue) => (byte)(wValue & 0xff);
+    private static byte LOBYTE(ushort wValue) => (byte)(wValue & 0xff);
 
-    public static IntPtr WndProcHandler(IntPtr hwnd, WindowMessage msg, IntPtr wParam, IntPtr lParam)
+    // This version is in theory thread-safe in the sense that no path should access ImGui::GetCurrentContext().
+    public unsafe static IntPtr WndProcHandler(IntPtr hwnd, WindowMessage msg, IntPtr wParam, IntPtr lParam, ImGuiIOPtr io)
     {
+        Data bd = GetBackendData(io);
+        if (bd == null)
+            return IntPtr.Zero;
         const int DBT_DEVNODES_CHANGED = 0x0007;
         const int XBUTTON1 = 1;
         const int WHEEL_DELTA = 120;
         const int HTCLIENT = 1;
-
-        if (ImGui.GetCurrentContext().Handle == null)
-            return IntPtr.Zero;
-
-        var io = ImGui.GetIO();
-
         switch (msg)
         {
             case WindowMessage.WM_MOUSEMOVE:
@@ -490,15 +547,15 @@ internal static unsafe class ImGuiImplWin32
                     // We need to call TrackMouseEvent in order to receive WM_MOUSELEAVE events
                     ImGuiMouseSource mouse_source = GetMouseSourceFromMessageExtraInfo();
                     int area = msg == WindowMessage.WM_MOUSEMOVE ? 1 : 2;
-                    _mouseHandle = hwnd;
-                    if (_mouseTrackedArea != area)
+                    bd.MouseHwnd = hwnd;
+                    if (bd.MouseTrackedArea != area)
                     {
                         TRACKMOUSEEVENT tme_cancel = new(TMEFlags.TME_CANCEL, hwnd, 0);
                         TRACKMOUSEEVENT tme_track = new(area == 2 ? TMEFlags.TME_LEAVE | TMEFlags.TME_NONCLIENT : TMEFlags.TME_LEAVE, hwnd, 0);
-                        if (_mouseTrackedArea != 0)
+                        if (bd.MouseTrackedArea != 0)
                             User32.TrackMouseEvent(ref tme_cancel);
                         User32.TrackMouseEvent(ref tme_track);
-                        _mouseTrackedArea = area;
+                        bd.MouseTrackedArea = area;
                     }
                     POINT mouse_pos = new(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
                     if (msg == WindowMessage.WM_NCMOUSEMOVE && !User32.ScreenToClient(hwnd, ref mouse_pos)) // WM_NCMOUSEMOVE are provided in absolute coordinates.
@@ -511,22 +568,22 @@ internal static unsafe class ImGuiImplWin32
             case WindowMessage.WM_NCMOUSELEAVE:
                 {
                     int area = msg == WindowMessage.WM_MOUSELEAVE ? 1 : 2;
-                    if (_mouseTrackedArea == area)
+                    if (bd.MouseTrackedArea == area)
                     {
-                        if (_mouseHandle == hwnd)
-                            _mouseHandle = IntPtr.Zero;
-                        _mouseTrackedArea = 0;
+                        if (bd.MouseHwnd == hwnd)
+                            bd.MouseHwnd = IntPtr.Zero;
+                        bd.MouseTrackedArea = 0;
                         io.AddMousePosEvent(-float.MaxValue, -float.MaxValue);
                     }
                     return IntPtr.Zero;
                 }
             case WindowMessage.WM_DESTROY:
-                if (_mouseHandle == hwnd && _mouseTrackedArea != 0)
+                if (bd.MouseHwnd == hwnd && bd.MouseTrackedArea != 0)
                 {
                     TRACKMOUSEEVENT tme_cancel = new(TMEFlags.TME_CANCEL, hwnd, 0);
                     User32.TrackMouseEvent(ref tme_cancel);
-                    _mouseHandle = IntPtr.Zero;
-                    _mouseTrackedArea = 0;
+                    bd.MouseHwnd = IntPtr.Zero;
+                    bd.MouseTrackedArea = 0;
                     io.AddMousePosEvent(-float.MaxValue, -float.MaxValue);
                 }
                 return IntPtr.Zero;
@@ -546,11 +603,11 @@ internal static unsafe class ImGuiImplWin32
                     if (msg == WindowMessage.WM_MBUTTONDOWN || msg == WindowMessage.WM_MBUTTONDBLCLK) { button = 2; }
                     if (msg == WindowMessage.WM_XBUTTONDOWN || msg == WindowMessage.WM_XBUTTONDBLCLK) { button = GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? 3 : 4; }
                     IntPtr hwnd_with_capture = User32.GetCapture();
-                    if (_mouseButtonsDown != 0 && hwnd_with_capture != hwnd) // Did we externally lost capture?
-                        _mouseButtonsDown = 0;
-                    if (_mouseButtonsDown == 0 && User32.GetCapture() == IntPtr.Zero)
+                    if (bd.MouseButtonsDown != 0 && hwnd_with_capture != hwnd) // Did we externally lost capture?
+                        bd.MouseButtonsDown = 0;
+                    if (bd.MouseButtonsDown == 0 && User32.GetCapture() == IntPtr.Zero)
                         User32.SetCapture(hwnd); // Allow us to read mouse coordinates when dragging mouse outside of our window bounds.
-                    _mouseButtonsDown |= 1 << button;
+                    bd.MouseButtonsDown |= 1 << button;
                     io.AddMouseSourceEvent(mouse_source);
                     io.AddMouseButtonEvent(button, true);
                     return IntPtr.Zero;
@@ -566,8 +623,8 @@ internal static unsafe class ImGuiImplWin32
                     if (msg == WindowMessage.WM_RBUTTONUP) { button = 1; }
                     if (msg == WindowMessage.WM_MBUTTONUP) { button = 2; }
                     if (msg == WindowMessage.WM_XBUTTONUP) { button = GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? 3 : 4; }
-                    _mouseButtonsDown &= ~(1 << button);
-                    if (_mouseButtonsDown == 0 && User32.GetCapture() == hwnd)
+                    bd.MouseButtonsDown &= ~(1 << button);
+                    if (bd.MouseButtonsDown == 0 && User32.GetCapture() == hwnd)
                         User32.ReleaseCapture();
                     io.AddMouseSourceEvent(mouse_source);
                     io.AddMouseButtonEvent(button, false);
@@ -588,7 +645,7 @@ internal static unsafe class ImGuiImplWin32
                     if ((int)wParam < 256)
                     {
                         // Submit modifiers
-                        UpdateKeyModifiers();
+                        UpdateKeyModifiers(io);
 
                         // Obtain virtual key code
                         ImGuiKey key = KeyEventToImGuiKey((VirtualKey)wParam, lParam);
@@ -597,28 +654,28 @@ internal static unsafe class ImGuiImplWin32
 
                         // Special behavior for VK_SNAPSHOT / ImGuiKey_PrintScreen as Windows doesn't emit the key down event.
                         if (key == ImGuiKey.PrintScreen && !is_key_down)
-                            AddKeyEvent(key, true, vk, scancode);
+                            AddKeyEvent(io, key, true, vk, scancode);
 
                         // Submit key event
                         if (key != ImGuiKey.None)
-                            AddKeyEvent(key, is_key_down, vk, scancode);
+                            AddKeyEvent(io, key, is_key_down, vk, scancode);
 
                         // Submit individual left/right modifier events
                         if (vk == VirtualKey.VK_SHIFT)
                         {
                             // Important: Shift keys tend to get stuck when pressed together, missing key-up events are corrected in ImGui_ImplWin32_ProcessKeyEventsWorkarounds()
-                            if (IsVkDown(VirtualKey.VK_LSHIFT) == is_key_down) { AddKeyEvent(ImGuiKey.LeftShift, is_key_down, VirtualKey.VK_LSHIFT, scancode); }
-                            if (IsVkDown(VirtualKey.VK_RSHIFT) == is_key_down) { AddKeyEvent(ImGuiKey.RightShift, is_key_down, VirtualKey.VK_RSHIFT, scancode); }
+                            if (IsVkDown(VirtualKey.VK_LSHIFT) == is_key_down) { AddKeyEvent(io, ImGuiKey.LeftShift, is_key_down, VirtualKey.VK_LSHIFT, scancode); }
+                            if (IsVkDown(VirtualKey.VK_RSHIFT) == is_key_down) { AddKeyEvent(io, ImGuiKey.RightShift, is_key_down, VirtualKey.VK_RSHIFT, scancode); }
                         }
                         else if (vk == VirtualKey.VK_CONTROL)
                         {
-                            if (IsVkDown(VirtualKey.VK_LCONTROL) == is_key_down) { AddKeyEvent(ImGuiKey.LeftCtrl, is_key_down, VirtualKey.VK_LCONTROL, scancode); }
-                            if (IsVkDown(VirtualKey.VK_RCONTROL) == is_key_down) { AddKeyEvent(ImGuiKey.RightCtrl, is_key_down, VirtualKey.VK_RCONTROL, scancode); }
+                            if (IsVkDown(VirtualKey.VK_LCONTROL) == is_key_down) { AddKeyEvent(io, ImGuiKey.LeftCtrl, is_key_down, VirtualKey.VK_LCONTROL, scancode); }
+                            if (IsVkDown(VirtualKey.VK_RCONTROL) == is_key_down) { AddKeyEvent(io, ImGuiKey.RightCtrl, is_key_down, VirtualKey.VK_RCONTROL, scancode); }
                         }
                         else if (vk == VirtualKey.VK_MENU)
                         {
-                            if (IsVkDown(VirtualKey.VK_LMENU) == is_key_down) { AddKeyEvent(ImGuiKey.LeftAlt, is_key_down, VirtualKey.VK_LMENU, scancode); }
-                            if (IsVkDown(VirtualKey.VK_RMENU) == is_key_down) { AddKeyEvent(ImGuiKey.RightAlt, is_key_down, VirtualKey.VK_RMENU, scancode); }
+                            if (IsVkDown(VirtualKey.VK_LMENU) == is_key_down) { AddKeyEvent(io, ImGuiKey.LeftAlt, is_key_down, VirtualKey.VK_LMENU, scancode); }
+                            if (IsVkDown(VirtualKey.VK_RMENU) == is_key_down) { AddKeyEvent(io, ImGuiKey.RightAlt, is_key_down, VirtualKey.VK_RMENU, scancode); }
                         }
                     }
                     return IntPtr.Zero;
@@ -626,6 +683,9 @@ internal static unsafe class ImGuiImplWin32
             case WindowMessage.WM_SETFOCUS:
             case WindowMessage.WM_KILLFOCUS:
                 io.AddFocusEvent(msg == WindowMessage.WM_SETFOCUS);
+                return IntPtr.Zero;
+            case WindowMessage.WM_INPUTLANGCHANGE:
+                UpdateKeyboardCodePage();
                 return IntPtr.Zero;
             case WindowMessage.WM_CHAR:
                 if (User32.IsWindowUnicode(hwnd))
@@ -636,21 +696,20 @@ internal static unsafe class ImGuiImplWin32
                 }
                 else
                 {
-                    const int wideBufferSize = 1;
-                    var wch = Marshal.AllocHGlobal(wideBufferSize);
-                    Kernel32.MultiByteToWideChar(Kernel32.CP_ACP, Kernel32.MB_PRECOMPOSED, [ *(byte*)&wParam ], 1, wch, wideBufferSize);
-                    io.AddInputCharacter(*(char*)wch);
+                    var wch = Marshal.AllocHGlobal(1);
+                    Kernel32.MultiByteToWideChar(bd.KeyboardCodePage, User32.MB_PRECOMPOSED, [ (byte)&wParam ], 1, wch, 1);
+                    io.AddInputCharacter((uint)wch);
                     Marshal.FreeHGlobal(wch);
                 }
                 return IntPtr.Zero;
             case WindowMessage.WM_SETCURSOR:
                 // This is required to restore cursor when transitioning from e.g resize borders to client area.
-                if (LOWORD(lParam) == HTCLIENT && UpdateMouseCursor(_lastMouseCursor))
+                if (LOWORD(lParam) == HTCLIENT && UpdateMouseCursor(io, bd.LastMouseCursor))
                     return (IntPtr)1;
                 return IntPtr.Zero;
             case WindowMessage.WM_DEVICECHANGE:
                 if ((uint)wParam == DBT_DEVNODES_CHANGED)
-                    _wantUpdateHasGamepad = true;
+                    bd.WantUpdateHasGamepad = true;
                 return IntPtr.Zero;
         }
         return IntPtr.Zero;
@@ -673,7 +732,7 @@ internal static unsafe class ImGuiImplWin32
 
     // Perform our own check with RtlVerifyVersionInfo() instead of using functions from <VersionHelpers.h> as they
     // require a manifest to be functional for checks above 8.1. See https://github.com/ocornut/imgui/issues/4200
-    public static bool _IsWindowsVersionOrGreater(short major, short minor, short unused)
+    private unsafe static bool _IsWindowsVersionOrGreater(short major, short minor, short unused)
     {
         const uint VER_MAJORVERSION = 0x0000002;
         const uint VER_MINORVERSION = 0x0000001;
@@ -689,15 +748,15 @@ internal static unsafe class ImGuiImplWin32
         return Ntdll.RtlVerifyVersionInfo(&versionInfo, VER_MASK.VER_MAJORVERSION | VER_MASK.VER_MINORVERSION, (long)conditionMask) == 0 ? true : false;
     }
 
-    public static bool _IsWindowsVistaOrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0600), LOBYTE(0x0600), 0); // _WIN32_WINNT_VISTA
-    public static bool _IsWindows8OrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0602), LOBYTE(0x0602), 0); // _WIN32_WINNT_WIN8
-    public static bool _IsWindows8Point1OrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0603), LOBYTE(0x0603), 0); // _WIN32_WINNT_WINBLUE
-    public static bool _IsWindows10OrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0A00), LOBYTE(0x0A00), 0); // _WIN32_WINNT_WINTHRESHOLD / _WIN32_WINNT_WIN10
+    private static bool _IsWindowsVistaOrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0600), LOBYTE(0x0600), 0); // _WIN32_WINNT_VISTA
+    private static bool _IsWindows8OrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0602), LOBYTE(0x0602), 0); // _WIN32_WINNT_WIN8
+    private static bool _IsWindows8Point1OrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0603), LOBYTE(0x0603), 0); // _WIN32_WINNT_WINBLUE
+    private static bool _IsWindows10OrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0A00), LOBYTE(0x0A00), 0); // _WIN32_WINNT_WINTHRESHOLD / _WIN32_WINNT_WIN10
 
-    public static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new IntPtr(-4);
+    private static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new IntPtr(-4);
 
     // Helper function to enable DPI awareness without setting up a manifest
-    public static void EnableDpiAwareness()
+    private static void EnableDpiAwareness()
     {
         if (_IsWindows10OrGreater())
         {
@@ -713,7 +772,7 @@ internal static unsafe class ImGuiImplWin32
         User32.SetProcessDPIAware();
     }
 
-    public static float GetDpiScaleForMonitor(void* monitor)
+    private unsafe static float GetDpiScaleForMonitor(void* monitor)
     {
         uint xdpi, ydpi = 96;
         if (_IsWindows8Point1OrGreater())
@@ -734,14 +793,14 @@ internal static unsafe class ImGuiImplWin32
         return xdpi / 96.0f;
     }
 
-    public static unsafe float GetDpiScaleForHwnd(void* hwnd)
+    private unsafe static float GetDpiScaleForHwnd(void* hwnd)
     {
         const int MONITOR_DEFAULTTONEAREST = 2;
         var monitor = User32.MonitorFromWindow((IntPtr)hwnd, MONITOR_DEFAULTTONEAREST);
         return GetDpiScaleForMonitor((void*)monitor);
     }
 
-    public static unsafe void EnableAlphaCompositing(void* hwnd)
+    private unsafe static void EnableAlphaCompositing(void* hwnd)
     {
         if (!_IsWindowsVistaOrGreater())
             return;

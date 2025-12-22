@@ -3,19 +3,19 @@ using System.Runtime.InteropServices;
 
 namespace DearImGuiInjection.Windows;
 
-public enum MONITOR_DPI_TYPE
+internal enum MONITOR_DPI_TYPE
 {
-    MDT_EFFECTIVE_DPI = 0,
-    MDT_ANGULAR_DPI = 1,
-    MDT_RAW_DPI = 2,
+    MDT_EFFECTIVE_DPI,
+    MDT_ANGULAR_DPI,
+    MDT_RAW_DPI,
     MDT_DEFAULT = MDT_EFFECTIVE_DPI
 }
 
-public enum PROCESS_DPI_AWARENESS
+internal enum PROCESS_DPI_AWARENESS
 {
-    PROCESS_DPI_UNAWARE = 0,
-    PROCESS_SYSTEM_DPI_AWARE = 1,
-    PROCESS_PER_MONITOR_DPI_AWARE = 2
+    PROCESS_DPI_UNAWARE,
+    PROCESS_SYSTEM_DPI_AWARE,
+    PROCESS_PER_MONITOR_DPI_AWARE
 }
 
 internal static class ShCore

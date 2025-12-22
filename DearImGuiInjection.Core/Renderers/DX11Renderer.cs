@@ -49,7 +49,7 @@ internal enum IDXGISwapChain
     GetLastPresentCount = 17,
 }
 
-public class D3D11Renderer : IRenderer
+internal class DX11Renderer : IRenderer
 {
     // https://github.com/BepInEx/BepInEx/blob/master/Runtimes/Unity/BepInEx.Unity.IL2CPP/Hook/INativeDetour.cs#L54
     // Workaround for CoreCLR collecting all delegates
@@ -62,8 +62,8 @@ public class D3D11Renderer : IRenderer
     private static CDXGISwapChainPresentDelegate _swapChainPresentHookDelegate = new(SwapChainPresentHook);
     private static Hook<CDXGISwapChainPresentDelegate> _swapChainPresentHook;
 
-    public static event Action<SwapChain, uint, uint> OnPresent { add { _onPresentAction += value; } remove { _onPresentAction -= value; } }
-    private static Action<SwapChain, uint, uint> _onPresentAction;
+    public static event Action<SwapChain, uint, uint> OnPresent { add { _onPresent += value; } remove { _onPresent -= value; } }
+    private static Action<SwapChain, uint, uint> _onPresent;
 
     [Reloaded.Hooks.Definitions.X64.Function(Reloaded.Hooks.Definitions.X64.CallingConventions.Microsoft)]
     [Reloaded.Hooks.Definitions.X86.Function(Reloaded.Hooks.Definitions.X86.CallingConventions.Stdcall)]
@@ -72,13 +72,13 @@ public class D3D11Renderer : IRenderer
     private static CDXGISwapChainResizeBuffersDelegate _swapChainResizeBuffersHookDelegate = new(SwapChainResizeBuffersHook);
     private static Hook<CDXGISwapChainResizeBuffersDelegate> _swapChainResizeBuffersHook;
 
-    public static event Action<SwapChain, uint, uint, uint, Format, uint> PreResizeBuffers { add { _preResizeBuffers += value; } remove { _preResizeBuffers -= value; } }
-    private static Action<SwapChain, uint, uint, uint, Format, uint> _preResizeBuffers;
+    public static event Action<SwapChain, uint, uint, uint, Format, uint> OnPreResizeBuffers { add { _onPreResizeBuffers += value; } remove { _onPreResizeBuffers -= value; } }
+    private static Action<SwapChain, uint, uint, uint, Format, uint> _onPreResizeBuffers;
 
-    public static event Action<SwapChain, uint, uint, uint, Format, uint> PostResizeBuffers { add { _postResizeBuffers += value; } remove { _postResizeBuffers -= value; } }
-    private static Action<SwapChain, uint, uint, uint, Format, uint> _postResizeBuffers;
+    public static event Action<SwapChain, uint, uint, uint, Format, uint> OnPostResizeBuffers { add { _onPostResizeBuffers += value; } remove { _onPostResizeBuffers -= value; } }
+    private static Action<SwapChain, uint, uint, uint, Format, uint> _onPostResizeBuffers;
 
-    public RendererKind Kind => RendererKind.D3D11;
+    public RendererKind Kind => RendererKind.DX11;
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     public bool IsSupported()
@@ -106,26 +106,28 @@ public class D3D11Renderer : IRenderer
         return hasD3D11 || !hasD3D12;
     }
 
-    public bool Init()
+    public void Init()
     {
         var windowHandle = User32.CreateFakeWindow();
         var desc = new SwapChainDescription()
         {
-            BufferCount = 1,
-            ModeDescription = new ModeDescription(500, 300, new Rational(60, 1), Format.R8G8B8A8_UNorm),
-            IsWindowed = true,
-            OutputHandle = windowHandle,
+            ModeDescription = new ModeDescription(0, 0, new Rational(0, 0), Format.R8G8B8A8_UNorm),
             SampleDescription = new SampleDescription(1, 0),
-            Usage = Usage.RenderTargetOutput
+            Usage = Usage.RenderTargetOutput,
+            BufferCount = 1,
+            OutputHandle = windowHandle,
+            IsWindowed = true,
+            SwapEffect = SwapEffect.Discard
         };
-
         Device.CreateWithSwapChain(DriverType.Hardware, DeviceCreationFlags.None, desc, out var device, out var swapChain);
-        var swapChainVTable = VirtualFunctionTable.FromObject((nuint)(nint)swapChain.NativePointer, Enum.GetNames(typeof(IDXGISwapChain)).Length);
-        var swapChainPresentFunctionPtr = (nuint)(nint)swapChainVTable.TableEntries[(int)IDXGISwapChain.Present].FunctionPointer;
-        var swapChainResizeBuffersFunctionPtr = (nuint)(nint)swapChainVTable.TableEntries[(int)IDXGISwapChain.ResizeBuffers].FunctionPointer;
+        var swapChainVTable = 
+            VirtualFunctionTable.FromObject((nuint)(nint)swapChain.NativePointer, Enum.GetNames(typeof(IDXGISwapChain)).Length);
+        var swapChainPresentFunctionPtr = 
+            (nuint)(nint)swapChainVTable.TableEntries[(int)IDXGISwapChain.Present].FunctionPointer;
+        var swapChainResizeBuffersFunctionPtr = 
+            (nuint)(nint)swapChainVTable.TableEntries[(int)IDXGISwapChain.ResizeBuffers].FunctionPointer;
         device.Dispose();
         swapChain.Dispose();
-
         User32.DestroyWindow(windowHandle);
 
         _cache.Add(_swapChainPresentHookDelegate);
@@ -137,7 +139,6 @@ public class D3D11Renderer : IRenderer
         _swapChainResizeBuffersHook.Activate();
 
         ImGuiDX11.Init();
-        return true;
     }
 
     public void Dispose()
@@ -148,7 +149,9 @@ public class D3D11Renderer : IRenderer
         _swapChainPresentHook?.Disable();
         _swapChainPresentHook = null;
 
-        _onPresentAction = null;
+        _onPresent = null;
+        _onPreResizeBuffers = null;
+        _onPostResizeBuffers = null;
 
         ImGuiDX11.Dispose();
     }
@@ -156,10 +159,9 @@ public class D3D11Renderer : IRenderer
     private static IntPtr SwapChainPresentHook(IntPtr self, uint syncInterval, uint flags)
     {
         var swapChain = new SwapChain(self);
-
-        if (_onPresentAction != null)
+        if (_onPresent != null)
         {
-            foreach (Action<SwapChain, uint, uint> item in _onPresentAction.GetInvocationList())
+            foreach (Action<SwapChain, uint, uint> item in _onPresent.GetInvocationList())
             {
                 try
                 {
@@ -171,17 +173,15 @@ public class D3D11Renderer : IRenderer
                 }
             }
         }
-
         return _swapChainPresentHook.OriginalFunction(self, syncInterval, flags);
     }
 
-    private static IntPtr SwapChainResizeBuffersHook(IntPtr swapchainPtr, uint bufferCount, uint width, uint height, Format newFormat, uint swapchainFlags)
+    private static IntPtr SwapChainResizeBuffersHook(IntPtr self, uint bufferCount, uint width, uint height, Format newFormat, uint swapchainFlags)
     {
-        var swapChain = new SwapChain(swapchainPtr);
-
-        if (_preResizeBuffers != null)
+        var swapChain = new SwapChain(self);
+        if (_onPreResizeBuffers != null)
         {
-            foreach (Action<SwapChain, uint, uint, uint, Format, uint> item in _preResizeBuffers.GetInvocationList())
+            foreach (Action<SwapChain, uint, uint, uint, Format, uint> item in _onPreResizeBuffers.GetInvocationList())
             {
                 try
                 {
@@ -193,12 +193,10 @@ public class D3D11Renderer : IRenderer
                 }
             }
         }
-
-        var result = _swapChainResizeBuffersHook.OriginalFunction(swapchainPtr, bufferCount, width, height, newFormat, swapchainFlags);
-
-        if (_postResizeBuffers != null)
+        var result = _swapChainResizeBuffersHook.OriginalFunction(self, bufferCount, width, height, newFormat, swapchainFlags);
+        if (_onPostResizeBuffers != null)
         {
-            foreach (Action<SwapChain, uint, uint, uint, Format, uint> item in _postResizeBuffers.GetInvocationList())
+            foreach (Action<SwapChain, uint, uint, uint, Format, uint> item in _onPostResizeBuffers.GetInvocationList())
             {
                 try
                 {
@@ -210,7 +208,6 @@ public class D3D11Renderer : IRenderer
                 }
             }
         }
-
         return result;
     }
 }

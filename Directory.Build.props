@@ -7,6 +7,7 @@
   <PropertyGroup>
     <StartSteamGameAfterBuild>false</StartSteamGameAfterBuild>
     <SteamAppId></SteamAppId>
+    <SteamAppId>0</SteamAppId>
 
     <PackFolderName>Build</PackFolderName>
     <PackDir>$(SolutionDir)$(PackFolderName)\DearImGuiInjection-$(Configuration)_$(Platform)\</PackDir>

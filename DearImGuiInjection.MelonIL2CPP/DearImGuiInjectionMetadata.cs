@@ -1,6 +1,6 @@
 ﻿namespace DearImGuiInjection.MelonIL2CPP;
 
-internal static class Metadata
+public static class DearImGuiInjectionMetadata
 {
     public const string Author = "iDeathHD";
     public const string Name = "DearImGuiInjection_MelonIL2CPP";

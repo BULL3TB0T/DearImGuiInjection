@@ -1,42 +1,41 @@
 ﻿using DearImGuiInjection;
 using DearImGuiInjection.MelonIL2CPP;
 using DearImGuiInjection.Windows;
+using Il2CppInterop.Runtime.Injection;
 using MelonLoader;
 using MelonLoader.Utils;
 using System.IO;
 using System.Reflection;
+using UnityEngine;
 
-[assembly: MelonInfo(typeof(DearImGuiInjectionMelonIL2CPP), Metadata.Name, Metadata.Version, Metadata.Author, Metadata.DownloadLink)]
+[assembly: MelonInfo(typeof(DearImGuiInjectionMelonIL2CPP), DearImGuiInjectionMetadata.Name, DearImGuiInjectionMetadata.Version, DearImGuiInjectionMetadata.Author, DearImGuiInjectionMetadata.DownloadLink)]
 
 namespace DearImGuiInjection.MelonIL2CPP;
 
-internal class DearImGuiInjectionMelonIL2CPP : MelonMod
+internal class DearImGuiInjectionMelonIL2CPP : MelonMod, ILoader, ILog
 {
+    public LoaderKind Kind => LoaderKind.MelonIL2CPP;
+
+    public string ConfigPath => MelonEnvironment.UserDataDirectory;
+    public string AssemblyPath => Path.GetDirectoryName(MelonAssembly.Location);
+
     public override void OnInitializeMelon()
     {
-        Log.Init(new LogMelon(LoggerInstance));
-        if (!DearImGuiInjectionCore.Init(MelonEnvironment.UserDataDirectory, Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)))
+        if (!DearImGuiInjectionCore.Init(this, this))
             return;
-        DearImGuiInjectionCore.UseDefaultTheme = new ConfigEntryMelon<bool>(
-            MelonPreferences.CreateCategory(
-                DearImGuiInjectionCore.UseDefaultThemeCategory).CreateEntry(
-                DearImGuiInjectionCore.UseDefaultThemeKey,
-                DearImGuiInjectionCore.UseDefaultThemeDefaultValue,
-                DearImGuiInjectionCore.UseDefaultThemeDescription));
-        DearImGuiInjectionCore.CursorVisibility = new ConfigEntryMelon<VirtualKey>(
-            MelonPreferences.CreateCategory(
-                DearImGuiInjectionCore.CursorVisibilityCategory).CreateEntry(
-                DearImGuiInjectionCore.CursorVisibilityKey,
-                DearImGuiInjectionCore.CursorVisibilityDefaultValue,
-                DearImGuiInjectionCore.CursorVisibilityDescription));
-        DearImGuiInjectionCore.SaveOrRestoreCursorPosition = new ConfigEntryMelon<bool>(
-            MelonPreferences.CreateCategory(
-                DearImGuiInjectionCore.SaveRestoreCursorPositionCategory).CreateEntry(
-                DearImGuiInjectionCore.SaveRestoreCursorPositionKey,
-                DearImGuiInjectionCore.SaveRestoreCursorPositionDefaultValue,
-                DearImGuiInjectionCore.SaveRestoreCursorPositionDescription));
-        MelonPreferences.Save();
+        ClassInjector.RegisterTypeInIl2Cpp<UnityMainThreadDispatcher>();
+        var gameObject = new GameObject(DearImGuiInjectionMetadata.Name);
+        gameObject.hideFlags = HideFlags.HideAndDontSave;
+        UnityEngine.Object.DontDestroyOnLoad(gameObject);
+        gameObject.AddComponent<UnityMainThreadDispatcher>();
     }
 
     public override void OnDeinitializeMelon() => DearImGuiInjectionCore.Dispose();
+
+    public void Debug(object data) => LoggerInstance.Msg(data);
+    public void Error(object data) => LoggerInstance.Error(data);
+    public void Fatal(object data) => LoggerInstance.Error(data);
+    public new void Info(object data) => LoggerInstance.MsgPastel(data);
+    public void Message(object data) => LoggerInstance.Msg(data);
+    public void Warning(object data) => LoggerInstance.Warning(data);
 }
