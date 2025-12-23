@@ -83,7 +83,7 @@ public static class DearImGuiInjectionCore
         Kernel32.FreeLibrary(Library);
     }
 
-    public static ImGuiModule Register(string GUID, Action onInit = null, Action onDispose = null, Action onRender = null)
+    public static void Register(string GUID, Action onInit = null, Action onDispose = null, Action onRender = null)
     {
         ImGuiModule module = new ImGuiModule(GUID);
         if (Modules.Add(module))
@@ -91,7 +91,7 @@ public static class DearImGuiInjectionCore
             if (onRender == null)
             {
                 Log.Error($"\"{GUID}\": OnRender is required.");
-                return null;
+                return;
             }
             module.OnInit = onInit;
             module.OnDispose = onDispose;
@@ -99,12 +99,8 @@ public static class DearImGuiInjectionCore
             module.Context = ImGui.CreateContext();
             ImGui.SetCurrentContext(module.Context);
             module.IO = ImGui.GetIO();
-            return module;
+            return;
         }
-        else
-        {
-            Log.Warning($"\"{GUID}\": Already been registered.");
-            return null;
-        }
+        Log.Warning($"\"{GUID}\": Already been registered.");
     }
 }

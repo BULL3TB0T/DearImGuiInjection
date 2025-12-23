@@ -5,20 +5,31 @@ using System.Text;
 
 namespace DearImGuiInjection;
 
-public sealed class ImGuiModule
+internal sealed class ImGuiModule
 {
-    internal string GUID;
+    public string GUID;
 
-    internal bool IsInitialized;
+    public bool IsInitialized;
 
-    internal ImGuiContextPtr Context;
-    internal ImGuiIOPtr IO;
+    public ImGuiContextPtr Context;
+    public ImGuiIOPtr IO;
 
-    internal Action OnInit;
-    internal Action OnRender;
-    internal Action OnDispose;
+    public int ZIndex;
+    public bool IsHoveredThisFrame;
 
-    internal ImGuiModule(string GUID) => this.GUID = GUID;
+    public Action OnInit;
+    public Action OnRender;
+    public Action OnDispose;
+
+    public void Unfocus()
+    {
+        var oldContext = ImGui.GetCurrentContext();
+        ImGui.SetCurrentContext(Context);
+        ImGuiP.FocusWindow(null);
+        ImGui.SetCurrentContext(oldContext);
+    }
+
+    public ImGuiModule(string GUID) => this.GUID = GUID;
 
     private bool Equals(ImGuiModule other) => GUID == other.GUID;
     public override bool Equals(object obj) => obj is ImGuiModule other && Equals(other);
