@@ -29,6 +29,7 @@ internal static class ImGuiImplWin32
         public IntPtr XInputDLL;
         public XInputGetCapabilitiesDelegate XInputGetCapabilities;
         public XInputGetStateDelegate XInputGetState;
+        public uint XInputPacketNumber;
     }
 
     // Backend data stored in io.BackendPlatformUserData to allow support for multiple Dear ImGui contexts
@@ -63,7 +64,7 @@ internal static class ImGuiImplWin32
         return data;
     }
 
-    private unsafe static void ClearBackendData()
+    private unsafe static void FreeBackendData()
     {
         var io = ImGui.GetIO();
         if (io.BackendPlatformUserData == null)
@@ -150,6 +151,7 @@ internal static class ImGuiImplWin32
 
         Marshal.FreeHGlobal((IntPtr)io.BackendPlatformName);
         io.BackendFlags &= ~(ImGuiBackendFlags.HasMouseCursors | ImGuiBackendFlags.HasSetMousePos | ImGuiBackendFlags.HasGamepad);
+        FreeBackendData();
     }
 
     private static bool UpdateMouseCursor(ImGuiIOPtr io, ImGuiMouseCursor imgui_cursor)
@@ -284,6 +286,9 @@ internal static class ImGuiImplWin32
             return;
         io.BackendFlags |= ImGuiBackendFlags.HasGamepad;
         XINPUT_GAMEPAD gamepad = xinput_state.Gamepad;
+        if (bd.XInputPacketNumber != 0 && bd.XInputPacketNumber == xinput_state.dwPacketNumber)
+            return;
+        bd.XInputPacketNumber = xinput_state.dwPacketNumber;
 
         static float IM_SATURATE(float V) => V < 0.0f ? 0.0f : (V > 1.0f ? 1.0f : V);
         void MAP_BUTTON(ImGuiKey KEY_NO, XInputGamepad BUTTON_ENUM) => io.AddKeyEvent(KEY_NO, (gamepad.wButtons & (ushort)BUTTON_ENUM) != 0);

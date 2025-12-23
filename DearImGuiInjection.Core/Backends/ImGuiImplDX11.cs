@@ -56,7 +56,7 @@ internal static class ImGuiImplDX11
     {
         public Device Device;
         public DeviceContext DeviceContext;
-        public SamplerState FontSampler;
+        public SamplerState TexSamplerLinear;
         public VertexShader VertexShader;
         public PixelShader PixelShader;
         public InputLayout InputLayout;
@@ -140,7 +140,7 @@ internal static class ImGuiImplDX11
         return data;
     }
 
-    private unsafe static void ClearBackendData()
+    private unsafe static void FreeBackendData()
     {
         var io = ImGui.GetIO();
         if (io.BackendRendererUserData == null)
@@ -208,7 +208,7 @@ internal static class ImGuiImplDX11
         device_ctx.VertexShader.SetShader(bd.VertexShader, null, 0);
         device_ctx.VertexShader.SetConstantBuffer(0, bd.VertexConstantBuffer);
         device_ctx.PixelShader.SetShader(bd.PixelShader, null, 0);
-        device_ctx.PixelShader.SetSampler(0, bd.FontSampler);
+        device_ctx.PixelShader.SetSampler(0, bd.TexSamplerLinear);
         device_ctx.GeometryShader.SetShader(null, null, 0);
         device_ctx.HullShader.SetShader(null, null, 0); // In theory we should backup and restore this as well.. very infrequently used..
         device_ctx.DomainShader.SetShader(null, null, 0); // In theory we should backup and restore this as well.. very infrequently used..
@@ -318,7 +318,7 @@ internal static class ImGuiImplDX11
         RenderState renderState;
         renderState.Device = bd.Device.NativePointer;
         renderState.DeviceContext = bd.DeviceContext.NativePointer;
-        renderState.SamplerDefault = bd.FontSampler.NativePointer;
+        renderState.SamplerDefault = bd.TexSamplerLinear.NativePointer;
         renderState.VertexConstantBuffer = bd.VertexConstantBuffer.NativePointer;
         platform_io.RendererRenderState = &renderState;
 
@@ -388,17 +388,18 @@ internal static class ImGuiImplDX11
     private unsafe static void DestroyTexture(ImTextureData* tex)
     {
         Texture* backend_tex = (Texture*)tex->BackendUserData;
-        if (backend_tex == null)
-            return;
-        Debug.Assert(backend_tex->pTextureView == (IntPtr)tex->GetTexID());
-        Marshal.Release(backend_tex->pTexture);
-        Marshal.Release(backend_tex->pTextureView);
-        Marshal.FreeHGlobal((IntPtr)backend_tex);
+        if (backend_tex != null)
+        {
+            Debug.Assert(backend_tex->pTextureView == (IntPtr)tex->GetTexID());
+            Marshal.Release(backend_tex->pTexture);
+            Marshal.Release(backend_tex->pTextureView);
+            Marshal.FreeHGlobal((IntPtr)backend_tex);
 
-        // Clear identifiers and mark as destroyed (in order to allow e.g. calling InvalidateDeviceObjects while running)
-        tex->SetTexID(ImTextureID.Null);
+            // Clear identifiers and mark as destroyed (in order to allow e.g. calling InvalidateDeviceObjects while running)
+            tex->SetTexID(ImTextureID.Null);
+            tex->BackendUserData = null;
+        }
         tex->SetStatus(ImTextureStatus.Destroyed);
-        tex->BackendUserData = null;
     }
 
     private unsafe static void UpdateTexture(ImTextureData* tex)
@@ -612,7 +613,7 @@ internal static class ImGuiImplDX11
 
         // Create texture sampler
         // (Bilinear sampling is required by default. Set 'io.Fonts->Flags |= ImFontAtlasFlags_NoBakedLines' or 'style.AntiAliasedLinesUseTex = false' to allow point/nearest sampling)
-        bd.FontSampler = new SamplerState(bd.Device, new SamplerStateDescription
+        bd.TexSamplerLinear = new SamplerState(bd.Device, new SamplerStateDescription
         {
             Filter = Filter.MinMagMipLinear,
             AddressU = TextureAddressMode.Clamp,
@@ -642,8 +643,8 @@ internal static class ImGuiImplDX11
                 DestroyTexture(tex);
         }
 
-        bd.FontSampler?.Dispose();
-        bd.FontSampler = null;
+        bd.TexSamplerLinear?.Dispose();
+        bd.TexSamplerLinear = null;
         bd.VertexBuffer?.Dispose();
         bd.VertexBuffer = null;
         bd.IndexBuffer?.Dispose();
@@ -686,6 +687,7 @@ internal static class ImGuiImplDX11
     {
         Data bd = GetBackendData();
         Debug.Assert(bd != null, "No renderer backend to shutdown, or already shutdown?");
+        var io = ImGui.GetIO();
 
         InvalidateDeviceObjects();
 
@@ -693,11 +695,10 @@ internal static class ImGuiImplDX11
         bd.Device = null;
         bd.DeviceContext = null;
 
-        var io = ImGui.GetIO();
         Marshal.FreeHGlobal((IntPtr)io.BackendRendererName);
         io.BackendFlags &= ~ImGuiBackendFlags.RendererHasVtxOffset;
         io.BackendFlags &= ~ImGuiBackendFlags.RendererHasTextures;
-        ClearBackendData();
+        FreeBackendData();
     }
 
     public static void NewFrame()

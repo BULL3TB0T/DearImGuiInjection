@@ -15,6 +15,8 @@ namespace DearImGuiInjection.Backends;
 
 internal static class ImGuiDX11
 {
+    private static bool _isInitialized;
+
     private static Device _device;
     private static DeviceContext _deviceContext;
 
@@ -23,8 +25,6 @@ internal static class ImGuiDX11
     private static IntPtr _originalWindowProc;
 
     private static RenderTargetView _renderTargetView;
-
-    private static bool _isInitialized;
 
     public static void Init()
     {
@@ -38,10 +38,8 @@ internal static class ImGuiDX11
         DX11Renderer.OnPostResizeBuffers -= OnPostResizeBuffers;
         DX11Renderer.OnPreResizeBuffers -= OnPreResizeBuffers;
         DX11Renderer.OnPresent -= OnPresent;
-
         if (!DearImGuiInjectionCore.IsInitialized)
             return;
-
         foreach (ImGuiModule module in DearImGuiInjectionCore.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
@@ -49,18 +47,13 @@ internal static class ImGuiDX11
             ImGuiImplWin32.Shutdown();
         }
         Log.Info("ImGui_ImplWin32_Shutdown()");
-
         _renderTargetView?.Dispose();
         _renderTargetView = null;
-
         _deviceContext?.Dispose();
         _deviceContext = null;
-
         _device?.Dispose();
         _device = null;
-
         User32.SetWindowLong(_windowHandle, User32.GWL_WNDPROC, _originalWindowProc);
-
         _originalWindowProc = IntPtr.Zero;
         _myWindowProc = null;
         _windowHandle = IntPtr.Zero;
@@ -134,13 +127,13 @@ internal static class ImGuiDX11
             {
                 ImGuiImplWin32.Init(_windowHandle);
                 ImGuiImplDX11.Init(_device.NativePointer, _deviceContext.NativePointer);
-                module.OnInit?.Invoke(module);
+                module.OnInit?.Invoke();
                 module.IsInitialized = true;
             }
             ImGuiImplWin32.NewFrame();
             ImGuiImplDX11.NewFrame();
             ImGui.NewFrame();
-            module.OnRender.Invoke(module);
+            module.OnRender.Invoke();
             ImGui.Render();
             ImGuiImplDX11.RenderDrawData(ImGui.GetDrawData().Handle);
         }

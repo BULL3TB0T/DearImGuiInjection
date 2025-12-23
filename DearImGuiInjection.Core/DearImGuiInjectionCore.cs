@@ -56,8 +56,7 @@ public static class DearImGuiInjectionCore
         };
         Library = Kernel32.LoadLibrary(libraryPath);
         ImGui.InitApi(new NativeLibraryContext(Library));
-        Register("guid.test", onRender: (module) => { ImGui.Begin("asd"); ImGui.End(); });
-        Register("guid.asd", onRender: (module) => { ImGui.ShowDemoWindow(); });
+        Register("guid.test", onRender: () => { ImGui.ShowDemoWindow(); });
         IsInitialized = true;
         return true;
     }
@@ -75,7 +74,7 @@ public static class DearImGuiInjectionCore
         foreach (ImGuiModule module in Modules)
         {
             ImGui.SetCurrentContext(module.Context);
-            module.OnDispose?.Invoke(module);
+            module.OnDispose?.Invoke();
             module.OnDispose = null;
             ImGui.DestroyContext(module.Context);
             module.Context = null;
@@ -84,8 +83,7 @@ public static class DearImGuiInjectionCore
         Kernel32.FreeLibrary(Library);
     }
 
-    public static ImGuiModule Register(string GUID, Action<ImGuiModule> onInit = null, Action<ImGuiModule> onDispose = null,
-        Action<ImGuiModule> onRender = null)
+    public static ImGuiModule Register(string GUID, Action onInit = null, Action onDispose = null, Action onRender = null)
     {
         ImGuiModule module = new ImGuiModule(GUID);
         if (Modules.Add(module))

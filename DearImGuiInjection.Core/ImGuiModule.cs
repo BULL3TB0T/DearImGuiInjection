@@ -9,14 +9,14 @@ public sealed class ImGuiModule
 {
     internal string GUID;
 
-    public bool IsInitialized { get; internal set; }
+    internal bool IsInitialized;
 
-    public ImGuiContextPtr Context { get; internal set; }
-    public ImGuiIOPtr IO { get; internal set; }
+    internal ImGuiContextPtr Context;
+    internal ImGuiIOPtr IO;
 
-    internal Action<ImGuiModule> OnInit;
-    internal Action<ImGuiModule> OnRender;
-    internal Action<ImGuiModule> OnDispose;
+    internal Action OnInit;
+    internal Action OnRender;
+    internal Action OnDispose;
 
     internal ImGuiModule(string GUID) => this.GUID = GUID;
 
