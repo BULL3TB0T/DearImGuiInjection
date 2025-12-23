@@ -701,10 +701,9 @@ internal static class ImGuiImplWin32
                 }
                 else
                 {
-                    var wch = Marshal.AllocHGlobal(1);
-                    Kernel32.MultiByteToWideChar(bd.KeyboardCodePage, User32.MB_PRECOMPOSED, [ (byte)&wParam ], 1, wch, 1);
-                    io.AddInputCharacter((uint)wch);
-                    Marshal.FreeHGlobal(wch);
+                    char wch = (char)0;
+                    Kernel32.MultiByteToWideChar(bd.KeyboardCodePage, User32.MB_PRECOMPOSED, (byte*)&wParam, 1, &wch, 1);
+                    io.AddInputCharacter(wch);
                 }
                 return IntPtr.Zero;
             case WindowMessage.WM_SETCURSOR:

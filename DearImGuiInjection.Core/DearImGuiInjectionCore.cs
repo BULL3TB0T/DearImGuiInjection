@@ -57,6 +57,7 @@ public static class DearImGuiInjectionCore
         Library = Kernel32.LoadLibrary(libraryPath);
         ImGui.InitApi(new NativeLibraryContext(Library));
         Register("guid.test", onRender: () => { ImGui.ShowDemoWindow(); });
+        Register("guid.hi", onRender: () => { ImGui.Begin("hi test"); ImGui.End(); });
         IsInitialized = true;
         return true;
     }

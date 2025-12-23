@@ -22,13 +22,8 @@ internal static class Kernel32
     public static extern bool QueryPerformanceFrequency(out long frequency);
 
     [DllImport("kernel32.dll", SetLastError = true)]
-    public unsafe static extern int MultiByteToWideChar(
-        uint codePage,
-        uint dwFlags,
-        [In][MarshalAs(UnmanagedType.LPArray)] byte[] lpMultiByteStr,
-        int cbMultiByte,
-        IntPtr lpWideCharStr,
-        int cchWideChar);
+    public unsafe static extern int MultiByteToWideChar(uint codePage, uint dwFlags, byte* lpMultiByteStr, 
+        int cbMultiByte, char* lpWideCharStr, int cchWideChar);
 
     [SecurityCritical, SuppressUnmanagedCodeSecurity]
     [DllImport("kernel32.dll", CallingConvention = CallingConvention.Winapi)]
