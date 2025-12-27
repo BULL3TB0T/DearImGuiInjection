@@ -38,11 +38,7 @@ internal static class ImGuiImplWin32
     // FIXME: some shared resources (mouse cursor shape, gamepad) are mishandled when using multi-context.
     private unsafe static Data GetBackendData()
     {
-        var io = ImGui.GetIO();
-        if (io.BackendPlatformUserData == null)
-            return null;
-        int id = Marshal.ReadInt32((IntPtr)io.BackendPlatformUserData);
-        return _map.TryGetValue(id, out var data) ? data : null;
+        return GetBackendData(ImGui.GetIO());
     }
     private unsafe static Data GetBackendData(ImGuiIOPtr io)
     {

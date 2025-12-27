@@ -53,6 +53,7 @@ internal static class RendererManager
                 return false;
             }
         }
+        Log.Error($"Could not find the right renderer.");
         return false;
     }
 

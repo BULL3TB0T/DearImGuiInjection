@@ -3,10 +3,8 @@ using DearImGuiInjection.Windows;
 using Hexa.NET.ImGui;
 using SharpDX.Direct3D11;
 using SharpDX.DXGI;
-using SharpDX.Mathematics.Interop;
 using System;
 using System.Collections.Generic;
-using System.Numerics;
 using System.Runtime.InteropServices;
 
 using Device = SharpDX.Direct3D11.Device;
@@ -26,178 +24,206 @@ internal static class ImGuiDX11
 
     private static RenderTargetView _renderTargetView;
 
-    private static readonly List<ImGuiModule> _zOrdered = new();
-    private static ImGuiModule _mouseOwner;
+    private static List<ImGuiModule> _orderedModules = new();
     private static ImGuiModule _focusedModule;
-    private static int _mouseButtonsDownMask;
+    private static ImGuiModule _dragModule;
 
-    private static void EnsureZCache()
+    private static bool _saveToSettings;
+    private const string _settingsTypeName = "DearImGuiInjection";
+    private const string _settingsSectionName = "ZOrder";
+
+    private static IntPtr _settingsTypeNamePtr;
+    private static readonly Dictionary<string, int> _settingsData = new();
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private unsafe delegate void ClearAllDelegate(ImGuiContext* ctx, ImGuiSettingsHandler* handler);
+    private unsafe static readonly ClearAllDelegate _zClearAllDel = Z_ClearAll;
+    private static readonly IntPtr _zClearAllPtr = Marshal.GetFunctionPointerForDelegate(_zClearAllDel);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private unsafe delegate void ReadInitDelegate(ImGuiContext* ctx, ImGuiSettingsHandler* handler);
+    private unsafe static readonly ReadInitDelegate _zReadInitDel = Z_ReadInit;
+    private static readonly IntPtr _zReadInitPtr = Marshal.GetFunctionPointerForDelegate(_zReadInitDel);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private unsafe delegate void* ReadOpenDelegate(ImGuiContext* ctx, ImGuiSettingsHandler* handler, byte* name);
+    private unsafe static readonly ReadOpenDelegate _zReadOpenDel = Z_ReadOpen;
+    private static readonly IntPtr _zReadOpenPtr = Marshal.GetFunctionPointerForDelegate(_zReadOpenDel);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private unsafe delegate void ReadLineDelegate(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* entry, byte* line);
+    private unsafe static readonly ReadLineDelegate _zReadLineDel = Z_ReadLine;
+    private static readonly IntPtr _zReadLinePtr = Marshal.GetFunctionPointerForDelegate(_zReadLineDel);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private unsafe delegate void ApplyAllDelegate(ImGuiContext* ctx, ImGuiSettingsHandler* handler);
+    private unsafe static readonly ApplyAllDelegate _zApplyAllDel = Z_ApplyAll;
+    private static readonly IntPtr _zApplyAllPtr = Marshal.GetFunctionPointerForDelegate(_zApplyAllDel);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private unsafe delegate void WriteAllDelegate(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* outBuf);
+    private unsafe static readonly WriteAllDelegate _zWriteAllDel = Z_WriteAll;
+    private static readonly IntPtr _zWriteAllPtr = Marshal.GetFunctionPointerForDelegate(_zWriteAllDel);
+
+    private static unsafe void Z_ClearAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler) => _settingsData.Clear();
+
+    private static unsafe void Z_ReadInit(ImGuiContext* ctx, ImGuiSettingsHandler* handler) => _settingsData.Clear();
+
+    private static unsafe void* Z_ReadOpen(ImGuiContext* ctx, ImGuiSettingsHandler* handler, byte* name)
     {
-        if (_zOrdered.Count == DearImGuiInjectionCore.Modules.Count)
+        if (name == null || Marshal.PtrToStringAnsi((IntPtr)name) != _settingsSectionName)
+            return null;
+        return ctx;
+    }
+
+    private static unsafe void Z_ReadLine(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* entry, byte* line)
+    {
+        if (line == null)
             return;
-        _zOrdered.Clear();
-        foreach (var m in DearImGuiInjectionCore.Modules)
-            _zOrdered.Add(m);
-        _zOrdered.Sort(static (a, b) =>
+        string s = Marshal.PtrToStringAnsi((IntPtr)line);
+        if (string.IsNullOrWhiteSpace(s))
+            return;
+        int eq = s.IndexOf('=');
+        if (eq <= 0 || eq >= s.Length - 1)
+            return;
+        string GUID = s.Substring(0, eq).Trim();
+        if (GUID.Length == 0)
+            return;
+        if (!int.TryParse(s.Substring(eq + 1).Trim(), out int zIndex))
+            return;
+        _settingsData[GUID] = zIndex;
+    }
+
+    private static unsafe void Z_ApplyAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler)
+    {
+        for (int i = 0; i < _orderedModules.Count; i++)
         {
-            int z = a.ZIndex.CompareTo(b.ZIndex);
-            return z != 0 ? z : StringComparer.Ordinal.Compare(a.GUID, b.GUID);
-        });
-        NormalizeZIndices();
+            ImGuiModule module = _orderedModules[i];
+            if (_settingsData.TryGetValue(module.GUID, out int zIndex))
+                module.ZIndex = zIndex;
+        }
+        _orderedModules.Sort((a, b) => a.ZIndex.CompareTo(b.ZIndex));
+        Normalize();
     }
 
-    private static void NormalizeZIndices()
+    private static unsafe void Z_WriteAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf)
     {
-        for (int i = 0; i < _zOrdered.Count; i++)
-            _zOrdered[i].ZIndex = i;
+        buf->appendf($"[{_settingsTypeName}][{_settingsSectionName}]\n");
+        IntPtr iniFilename = (IntPtr)ctx->IO.IniFilename;
+        List<ImGuiModule> list = new();
+        for (int i = 0; i < _orderedModules.Count; i++)
+        {
+            ImGuiModule module = _orderedModules[i];
+            var moduleIniFilename = module.IO.IniFilename;
+            if (moduleIniFilename == null || 
+                Marshal.PtrToStringAnsi((IntPtr)moduleIniFilename) != Marshal.PtrToStringAnsi(iniFilename))
+                continue;
+            list.Add(module);
+        }
+        list.Sort((a, b) => a.ZIndex.CompareTo(b.ZIndex));
+        for (int i = 0; i < list.Count; i++)
+        {
+            var module = list[i];
+            buf->appendf($"{module.GUID}={module.ZIndex}\n");
+        }
+        buf->appendf("\n");
     }
 
-    private static void BringToFront(ImGuiModule module)
+    private static void Normalize()
     {
-        if (module == null)
-            return;
-        int idx = _zOrdered.IndexOf(module);
-        if (idx < 0)
-            return;
-        if (idx == _zOrdered.Count - 1)
-            return;
-        _zOrdered.RemoveAt(idx);
-        _zOrdered.Add(module);
-        NormalizeZIndices();
+        for (int i = 0; i < _orderedModules.Count; i++)
+            _orderedModules[i].ZIndex = i;
     }
 
+    private static void EnsureCache()
+    {
+        if (_orderedModules.Count == DearImGuiInjectionCore.Modules.Count)
+            return;
+        foreach (var module in DearImGuiInjectionCore.Modules)
+            if (!_orderedModules.Contains(module))
+                _orderedModules.Add(module);
+        _orderedModules.Sort((a, b) => a.ZIndex.CompareTo(b.ZIndex));
+        Normalize();
+    }
+
+    private unsafe static void BringToFront(ImGuiModule module)
+    {
+        int indexOf = _orderedModules.IndexOf(module);
+        if (indexOf < 0 || indexOf == _orderedModules.Count - 1)
+            return;
+        _orderedModules.RemoveAt(indexOf);
+        _orderedModules.Add(module);
+        Normalize();
+        _saveToSettings = true;
+    }
+     
     private static ImGuiModule FindTopHoveredModule()
     {
-        for (int i = _zOrdered.Count - 1; i >= 0; i--)
+        for (int i = _orderedModules.Count - 1; i >= 0; i--)
         {
-            if (_zOrdered[i].IsHoveredThisFrame)
-                return _zOrdered[i];
+            ImGuiModule module = _orderedModules[i];
+            if (module.IO.WantCaptureMouse)
+                return module;
         }
         return null;
     }
 
-    private static int GetXButtonMask(IntPtr wParam)
-    {
-        int button = (short)((((long)wParam) >> 16) & 0xFFFF);
-        return button == 1 ? (1 << 3) : button == 2 ? (1 << 4) : 0;
-    }
-
-    private static bool IsMouseDownMsg(WindowMessage m) => m is
-        WindowMessage.WM_LBUTTONDOWN or WindowMessage.WM_RBUTTONDOWN or
-        WindowMessage.WM_MBUTTONDOWN or WindowMessage.WM_XBUTTONDOWN or
-        WindowMessage.WM_LBUTTONDBLCLK or WindowMessage.WM_RBUTTONDBLCLK or
-        WindowMessage.WM_MBUTTONDBLCLK or WindowMessage.WM_XBUTTONDBLCLK;
-
-    private static bool IsMouseUpMsg(WindowMessage m) => m is
-        WindowMessage.WM_LBUTTONUP or WindowMessage.WM_RBUTTONUP or
-        WindowMessage.WM_MBUTTONUP or WindowMessage.WM_XBUTTONUP;
-
-    private static bool IsMouseMsg(WindowMessage m) => m is
-        WindowMessage.WM_MOUSEMOVE or WindowMessage.WM_NCMOUSEMOVE or
-        WindowMessage.WM_LBUTTONDOWN or WindowMessage.WM_LBUTTONUP or
-        WindowMessage.WM_RBUTTONDOWN or WindowMessage.WM_RBUTTONUP or
-        WindowMessage.WM_MBUTTONDOWN or WindowMessage.WM_MBUTTONUP or
-        WindowMessage.WM_MOUSEWHEEL or WindowMessage.WM_MOUSEHWHEEL or
-        WindowMessage.WM_XBUTTONDOWN or WindowMessage.WM_XBUTTONUP or
-        WindowMessage.WM_LBUTTONDBLCLK or WindowMessage.WM_RBUTTONDBLCLK or
-        WindowMessage.WM_MBUTTONDBLCLK or WindowMessage.WM_XBUTTONDBLCLK;
-
-    private static bool IsKeyMsg(WindowMessage m) => m is
-        WindowMessage.WM_KEYDOWN or WindowMessage.WM_KEYUP or
-        WindowMessage.WM_SYSKEYDOWN or WindowMessage.WM_SYSKEYUP or
-        WindowMessage.WM_CHAR or WindowMessage.WM_SYSCHAR;
-
-    private static bool IsCaptureCancelMsg(WindowMessage m) => m is
-        WindowMessage.WM_CANCELMODE or WindowMessage.WM_CAPTURECHANGED or WindowMessage.WM_KILLFOCUS;
-
-    private static void UpdateMouseButtonsDown(WindowMessage uMsg, IntPtr wParam)
-    {
-        switch (uMsg)
-        {
-            case WindowMessage.WM_LBUTTONDOWN: _mouseButtonsDownMask |= (1 << 0); break;
-            case WindowMessage.WM_LBUTTONUP: _mouseButtonsDownMask &= ~(1 << 0); break;
-
-            case WindowMessage.WM_RBUTTONDOWN: _mouseButtonsDownMask |= (1 << 1); break;
-            case WindowMessage.WM_RBUTTONUP: _mouseButtonsDownMask &= ~(1 << 1); break;
-
-            case WindowMessage.WM_MBUTTONDOWN: _mouseButtonsDownMask |= (1 << 2); break;
-            case WindowMessage.WM_MBUTTONUP: _mouseButtonsDownMask &= ~(1 << 2); break;
-
-            case WindowMessage.WM_XBUTTONDOWN:
-                {
-                    int x = GetXButtonMask(wParam);
-                    if (x != 0) _mouseButtonsDownMask |= x;
-                    break;
-                }
-            case WindowMessage.WM_XBUTTONUP:
-                {
-                    int x = GetXButtonMask(wParam);
-                    if (x != 0) _mouseButtonsDownMask &= ~x;
-                    break;
-                }
-        }
-    }
-
     private static IntPtr WndProcHandler(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam)
     {
-        EnsureZCache();
-        bool isMouse = IsMouseMsg(uMsg);
-        bool isKey = IsKeyMsg(uMsg);
-        if (IsCaptureCancelMsg(uMsg))
+        bool isMouse =
+               uMsg == WindowMessage.WM_MOUSEMOVE || uMsg == WindowMessage.WM_NCMOUSEMOVE
+               || uMsg == WindowMessage.WM_LBUTTONDOWN || uMsg == WindowMessage.WM_LBUTTONUP
+               || uMsg == WindowMessage.WM_RBUTTONDOWN || uMsg == WindowMessage.WM_RBUTTONUP
+               || uMsg == WindowMessage.WM_MBUTTONDOWN || uMsg == WindowMessage.WM_MBUTTONUP
+               || uMsg == WindowMessage.WM_MOUSEWHEEL || uMsg == WindowMessage.WM_MOUSEHWHEEL
+               || uMsg == WindowMessage.WM_XBUTTONDOWN || uMsg == WindowMessage.WM_XBUTTONUP
+               || uMsg == WindowMessage.WM_LBUTTONDBLCLK || uMsg == WindowMessage.WM_RBUTTONDBLCLK
+               || uMsg == WindowMessage.WM_MBUTTONDBLCLK || uMsg == WindowMessage.WM_XBUTTONDBLCLK;
+        bool isKey =
+               uMsg == WindowMessage.WM_KEYDOWN || uMsg == WindowMessage.WM_KEYUP || uMsg == WindowMessage.WM_SYSKEYDOWN
+               || uMsg == WindowMessage.WM_SYSKEYUP || uMsg == WindowMessage.WM_CHAR || uMsg == WindowMessage.WM_SYSCHAR;
+        ImGuiModule topHoveredModule = FindTopHoveredModule();
+        if (uMsg == WindowMessage.WM_MOUSEMOVE || uMsg == WindowMessage.WM_NCMOUSEMOVE)
         {
-            _mouseOwner = null;
-            _mouseButtonsDownMask = 0;
+            for (int i = 0; i < _orderedModules.Count; i++)
+                ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, _orderedModules[i].IO);
+            if (topHoveredModule != null)
+                return IntPtr.Zero;
             return User32.CallWindowProc(_originalWindowProc, hWnd, uMsg, wParam, lParam);
         }
-        if (_mouseOwner == null && IsMouseDownMsg(uMsg))
+        if (_dragModule != null)
         {
-            ImGuiModule topHovered = FindTopHoveredModule();
-            if (topHovered != null)
+            ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, _dragModule.IO);
+            if (uMsg == WindowMessage.WM_LBUTTONUP || uMsg == WindowMessage.WM_KILLFOCUS)
+                _dragModule = null;
+            return User32.CallWindowProc(_originalWindowProc, hWnd, uMsg, wParam, lParam);
+        }
+        if (isMouse && topHoveredModule != null)
+        {
+            ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, topHoveredModule.IO);
+            if (uMsg == WindowMessage.WM_LBUTTONDOWN)
             {
-                if (_focusedModule != null && _focusedModule != topHovered)
-                    _focusedModule.Unfocus();
-                _focusedModule = topHovered;
-                BringToFront(topHovered);
-                _mouseOwner = topHovered;
-                UpdateMouseButtonsDown(uMsg, wParam);
-                ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, _mouseOwner.IO);
-
-                return IntPtr.Zero;
+                if (_focusedModule != topHoveredModule)
+                {
+                    if (_focusedModule != null)
+                        _focusedModule.UnfocusNextFrame = true;
+                    BringToFront(topHoveredModule);
+                }
+                _focusedModule = topHoveredModule;
+                _dragModule = topHoveredModule;
             }
-        }
-        if (_mouseOwner != null)
-        {
-            bool isMouseUp = IsMouseUpMsg(uMsg);
-            if (isMouse)
-                UpdateMouseButtonsDown(uMsg, wParam);
-            ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, _mouseOwner.IO);
-            if (isMouse && isMouseUp && _mouseButtonsDownMask == 0)
-                _mouseOwner = null;
-            if (isMouse || isKey)
-                return IntPtr.Zero;
-            return User32.CallWindowProc(_originalWindowProc, hWnd, uMsg, wParam, lParam);
-        }
-        for (int i = 0; i < _zOrdered.Count; i++)
-            ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, _zOrdered[i].IO);
-        bool wantCaptureMouse = false;
-        bool wantCaptureKeyboard = false;
-        for (int i = _zOrdered.Count - 1; i >= 0; i--)
-        {
-            var io = _zOrdered[i].IO;
-            if (!wantCaptureMouse && io.WantCaptureMouse)
-                wantCaptureMouse = true;
-            if (!wantCaptureKeyboard && io.WantCaptureKeyboard)
-                wantCaptureKeyboard = true;
-            if (wantCaptureMouse && wantCaptureKeyboard)
-                break;
-        }
-        var hoveredTop2 = FindTopHoveredModule();
-        if (hoveredTop2 != null && hoveredTop2.IO.WantCaptureMouse)
-            wantCaptureMouse = true;
-        if (wantCaptureMouse && isMouse)
             return IntPtr.Zero;
-        if (wantCaptureKeyboard && isKey)
+        }
+        if (uMsg == WindowMessage.WM_LBUTTONDOWN && _focusedModule != null)
+        {
+            _focusedModule.UnfocusNextFrame = true;
+            _focusedModule = null;
+        }
+        if (isKey && _focusedModule != null && _focusedModule.IO.WantCaptureKeyboard)
+        {
+            ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, _focusedModule.IO);
             return IntPtr.Zero;
+        }
         return User32.CallWindowProc(_originalWindowProc, hWnd, uMsg, wParam, lParam);
     }
 
@@ -221,7 +247,6 @@ internal static class ImGuiDX11
             ImGuiImplDX11.Shutdown();
             ImGuiImplWin32.Shutdown();
         }
-        Log.Info("ImGui_ImplWin32_Shutdown()");
         _renderTargetView?.Dispose();
         _renderTargetView = null;
         _deviceContext?.Dispose();
@@ -254,33 +279,50 @@ internal static class ImGuiDX11
             _renderTargetView = new RenderTargetView(_device, backBuffer);
         }
         _deviceContext.OutputMerger.SetRenderTargets(_renderTargetView);
-        EnsureZCache();
-        for (int i = 0; i < _zOrdered.Count; i++)
+        EnsureCache();
+        for (int i = 0; i < _orderedModules.Count; i++)
         {
-            ImGuiModule module = _zOrdered[i];
+            ImGuiModule module = _orderedModules[i];
             ImGui.SetCurrentContext(module.Context);
+            var iniFileName = module.IO.IniFilename;
             if (!module.IsInitialized)
             {
                 ImGuiImplWin32.Init(_windowHandle);
                 ImGuiImplDX11.Init(_device.NativePointer, _deviceContext.NativePointer);
                 module.OnInit?.Invoke();
+                if (iniFileName != null)
+                {
+                    if (_settingsTypeNamePtr == IntPtr.Zero)
+                        _settingsTypeNamePtr = Marshal.StringToHGlobalAnsi(_settingsTypeName);
+                    ImGuiSettingsHandler* handler = 
+                        (ImGuiSettingsHandler*)Marshal.AllocHGlobal(sizeof(ImGuiSettingsHandler));
+                    handler->TypeName = (byte*)_settingsTypeNamePtr;
+                    handler->TypeHash = ImGuiP.ImHashStr((byte*)_settingsTypeNamePtr);
+                    handler->ClearAllFn = (void*)_zClearAllPtr;
+                    handler->ReadInitFn = (void*)_zReadInitPtr;
+                    handler->ReadOpenFn = (void*)_zReadOpenPtr;
+                    handler->ReadLineFn = (void*)_zReadLinePtr;
+                    handler->ApplyAllFn = (void*)_zApplyAllPtr;
+                    handler->WriteAllFn = (void*)_zWriteAllPtr;
+                    ImGuiP.AddSettingsHandler(handler);
+                }
+                module.IsInitialized = true;
             }
-            module.IsHoveredThisFrame = false;
             ImGuiImplWin32.NewFrame();
             ImGuiImplDX11.NewFrame();
             ImGui.NewFrame();
+            if (_saveToSettings && iniFileName != null)
+                ImGui.SaveIniSettingsToDisk(iniFileName);
             module.OnRender.Invoke();
-            module.IsHoveredThisFrame = ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow) ||
-                ImGui.IsAnyItemHovered() ||
-                ImGui.IsAnyItemActive();
             ImGui.Render();
             ImGuiImplDX11.RenderDrawData(ImGui.GetDrawData().Handle);
-            if (!module.IsInitialized)
+            if (module.UnfocusNextFrame)
             {
-                module.Unfocus();
-                module.IsInitialized = true;
+                ImGuiP.FocusWindow(null);
+                module.UnfocusNextFrame = false;
             }
         }
+        _saveToSettings = false;
     }
 
     private static void OnPreResizeBuffers(SwapChain swapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapchainFlags)

@@ -1,11 +1,15 @@
-﻿using DearImGuiInjection.Renderers;
+﻿using DearImGuiInjection.Backends;
+using DearImGuiInjection.Renderers;
 using DearImGuiInjection.Windows;
 using Hexa.NET.ImGui;
 using HexaGen.Runtime;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInEx5")]
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInExIL2CPP")]
@@ -24,7 +28,7 @@ public static class DearImGuiInjectionCore
     public static string AssemblyPath { get; private set; }
     public static string AssetsPath { get; private set; }
 
-    internal static HashSet<ImGuiModule> Modules = new HashSet<ImGuiModule>();
+    internal static List<ImGuiModule> Modules = new List<ImGuiModule>();
 
     private static ILoader Loader;
     private static IntPtr Library;
@@ -56,13 +60,11 @@ public static class DearImGuiInjectionCore
         };
         Library = Kernel32.LoadLibrary(libraryPath);
         ImGui.InitApi(new NativeLibraryContext(Library));
-        Register("guid.test", onRender: () => { ImGui.ShowDemoWindow(); });
-        Register("guid.hi", onRender: () => { ImGui.Begin("hi test"); ImGui.End(); });
         IsInitialized = true;
         return true;
     }
 
-    internal unsafe static void Dispose()
+    internal static void Dispose()
     {
         if (!IsInitialized)
             return;
@@ -84,24 +86,26 @@ public static class DearImGuiInjectionCore
         Kernel32.FreeLibrary(Library);
     }
 
-    public static void Register(string GUID, Action onInit = null, Action onDispose = null, Action onRender = null)
+    public unsafe static ImGuiModule RegisterModule(string GUID, Action onInit = null, Action onDispose = null, Action onRender = null)
     {
-        ImGuiModule module = new ImGuiModule(GUID);
-        if (Modules.Add(module))
+        if (onRender == null)
         {
-            if (onRender == null)
-            {
-                Log.Error($"\"{GUID}\": OnRender is required.");
-                return;
-            }
-            module.OnInit = onInit;
-            module.OnDispose = onDispose;
-            module.OnRender = onRender;
-            module.Context = ImGui.CreateContext();
-            ImGui.SetCurrentContext(module.Context);
-            module.IO = ImGui.GetIO();
-            return;
+            Log.Error($"\"{GUID}\": OnRender is required.");
+            return null;
         }
-        Log.Warning($"\"{GUID}\": Already been registered.");
+        if (string.IsNullOrEmpty(GUID) || Modules.Any(x => x.GUID == GUID))
+        {
+            Log.Warning($"\"{GUID}\": Already been registered.");
+            return null;
+        }
+        ImGuiModule module = new ImGuiModule(GUID);
+        module.OnInit = onInit;
+        module.OnDispose = onDispose;
+        module.OnRender = onRender;
+        module.Context = ImGui.CreateContext();
+        ImGui.SetCurrentContext(module.Context);
+        module.IO = ImGui.GetIO();
+        Modules.Add(module);
+        return module;
     }
 }

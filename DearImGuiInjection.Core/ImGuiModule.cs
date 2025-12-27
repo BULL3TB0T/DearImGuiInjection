@@ -1,37 +1,27 @@
 ﻿using Hexa.NET.ImGui;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 
 namespace DearImGuiInjection;
 
-internal sealed class ImGuiModule
+public sealed class ImGuiModule
 {
-    public string GUID;
+    internal string GUID;
 
-    public bool IsInitialized;
+    internal bool IsInitialized;
 
     public ImGuiContextPtr Context;
     public ImGuiIOPtr IO;
 
-    public int ZIndex;
-    public bool IsHoveredThisFrame;
+    internal int ZIndex;
 
-    public Action OnInit;
-    public Action OnRender;
-    public Action OnDispose;
+    public bool UnfocusNextFrame = true;
 
-    public void Unfocus()
-    {
-        var oldContext = ImGui.GetCurrentContext();
-        ImGui.SetCurrentContext(Context);
-        ImGuiP.FocusWindow(null);
-        ImGui.SetCurrentContext(oldContext);
-    }
+    internal Action OnInit;
+    internal Action OnRender;
+    internal Action OnDispose;
 
-    public ImGuiModule(string GUID) => this.GUID = GUID;
-
-    private bool Equals(ImGuiModule other) => GUID == other.GUID;
-    public override bool Equals(object obj) => obj is ImGuiModule other && Equals(other);
-    public override int GetHashCode() => GUID.GetHashCode();
+    internal ImGuiModule(string GUID) => this.GUID = GUID;
 }

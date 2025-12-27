@@ -13,7 +13,8 @@ internal class DearImGuiInjectionBepInExI2LCPP : BasePlugin, ILoader, ILog
     public LoaderKind Kind => LoaderKind.BepInExIL2CPP;
 
     public string ConfigPath => Paths.ConfigPath;
-    public string AssemblyPath => Path.GetDirectoryName(IL2CPPChainloader.Instance.Plugins[DearImGuiInjectionMetadata.GUID].Location);
+    public string AssemblyPath => 
+        Path.GetDirectoryName(IL2CPPChainloader.Instance.Plugins[DearImGuiInjectionMetadata.GUID].Location);
 
     public override void Load()
     {
