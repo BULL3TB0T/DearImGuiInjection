@@ -5,11 +5,14 @@ using Hexa.NET.ImGui;
 using HexaGen.Runtime;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInEx5")]
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInExIL2CPP")]
@@ -28,7 +31,7 @@ public static class DearImGuiInjectionCore
     public static string AssemblyPath { get; private set; }
     public static string AssetsPath { get; private set; }
 
-    internal static List<ImGuiModule> Modules = new List<ImGuiModule>();
+    internal static ImGuiMultiContextCompositor MultiContext = new();
 
     private static ILoader Loader;
     private static IntPtr Library;
@@ -68,17 +71,18 @@ public static class DearImGuiInjectionCore
     {
         if (!IsInitialized)
             return;
-        foreach (ImGuiModule module in Modules)
+        foreach (ImGuiModule module in MultiContext.Modules)
         {
             module.OnInit = null;
             module.OnRender = null;
         }
         RendererManager.Shutdown();
-        foreach (ImGuiModule module in Modules)
+        foreach (ImGuiModule module in MultiContext.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
             module.OnDispose?.Invoke();
             module.OnDispose = null;
+            MultiContext.RemoveModule(module);
             ImGui.DestroyContext(module.Context);
             module.Context = null;
         }
@@ -93,7 +97,7 @@ public static class DearImGuiInjectionCore
             Log.Error($"\"{GUID}\": OnRender is required.");
             return null;
         }
-        if (string.IsNullOrEmpty(GUID) || Modules.Any(x => x.GUID == GUID))
+        if (string.IsNullOrEmpty(GUID) || MultiContext.Modules.Any(x => x.GUID == GUID))
         {
             Log.Warning($"\"{GUID}\": Already been registered.");
             return null;
@@ -104,8 +108,10 @@ public static class DearImGuiInjectionCore
         module.OnRender = onRender;
         module.Context = ImGui.CreateContext();
         ImGui.SetCurrentContext(module.Context);
-        module.IO = ImGui.GetIO();
-        Modules.Add(module);
+        var io = ImGui.GetIO();
+        module.IO = io;
+        io.IniFilename = (byte*)Marshal.StringToHGlobalAnsi($"imgui_{GUID}.ini");
+        MultiContext.AddModule(module);
         return module;
     }
 }

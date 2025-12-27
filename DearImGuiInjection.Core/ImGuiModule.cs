@@ -1,8 +1,5 @@
 ﻿using Hexa.NET.ImGui;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Text;
 
 namespace DearImGuiInjection;
 
@@ -15,13 +12,16 @@ public sealed class ImGuiModule
     public ImGuiContextPtr Context;
     public ImGuiIOPtr IO;
 
-    internal int ZIndex;
-
     public bool UnfocusNextFrame = true;
+    internal bool DragDropActive;
 
     internal Action OnInit;
     internal Action OnRender;
     internal Action OnDispose;
 
     internal ImGuiModule(string GUID) => this.GUID = GUID;
+
+    private bool Equals(ImGuiModule other) => GUID == other.GUID;
+    public override bool Equals(object obj) => Equals(obj as ImGuiModule);
+    public override int GetHashCode() => GUID.GetHashCode();
 }

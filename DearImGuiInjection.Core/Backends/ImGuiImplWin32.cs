@@ -73,10 +73,10 @@ internal static class ImGuiImplWin32
     }
 
     // Functions
-    private unsafe static void UpdateKeyboardCodePage()
+    private unsafe static void UpdateKeyboardCodePage(ImGuiIOPtr io)
     {
         // Retrieve keyboard code page, required for handling of non-Unicode Windows.
-        Data bd = GetBackendData();
+        Data bd = GetBackendData(io);
         IntPtr keyboard_layout = User32.GetKeyboardLayout(0);
         uint keyboard_lcid = MAKELCID(HIWORD(keyboard_layout), User32.SORT_DEFAULT);
         if (User32.GetLocaleInfoA(keyboard_lcid, User32.LOCALE_RETURN_NUMBER | User32.LOCALE_IDEFAULTANSICODEPAGE, (IntPtr)bd.KeyboardCodePage, sizeof(uint)) == 0)
@@ -103,7 +103,7 @@ internal static class ImGuiImplWin32
         bd.TicksPerSecond = perf_frequency;
         bd.Time = perf_counter;
         bd.LastMouseCursor = ImGuiMouseCursor.Count;
-        UpdateKeyboardCodePage();
+        UpdateKeyboardCodePage(io);
 
         // Set platform dependent data in viewport
         ImGuiViewportPtr main_viewport = ImGui.GetMainViewport();
@@ -686,7 +686,7 @@ internal static class ImGuiImplWin32
                 io.AddFocusEvent(msg == WindowMessage.WM_SETFOCUS);
                 return IntPtr.Zero;
             case WindowMessage.WM_INPUTLANGCHANGE:
-                UpdateKeyboardCodePage();
+                UpdateKeyboardCodePage(io);
                 return IntPtr.Zero;
             case WindowMessage.WM_CHAR:
                 if (User32.IsWindowUnicode(hwnd))

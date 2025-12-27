@@ -1,0 +1,269 @@
+﻿using Hexa.NET.ImGui;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace DearImGuiInjection;
+
+// Multi-Context Compositor v0.11, for Dear ImGui
+// Get latest version at http://www.github.com/ocornut/imgui_club
+
+internal sealed class ImGuiMultiContextCompositor
+{
+    public readonly List<ImGuiModule> Modules = new();
+    public readonly List<ImGuiModule> ModulesFrontToBack = new();
+
+    private ImGuiContextPtr _ctxMouseFirst = null;
+    private ImGuiContextPtr _ctxMouseExclusive = null;
+    public ImGuiContextPtr _ctxMouseShape = null;
+    private ImGuiContextPtr _ctxKeyboardExclusive = null;
+    public ImGuiContextPtr _ctxDragDropSrc = null;
+    public ImGuiContextPtr _ctxDragDropDst = null;
+    private ImGuiPayload _dragDropPayload;
+
+    public void AddModule(ImGuiModule module)
+    {
+        Debug.Assert(!Modules.Contains(module));
+        Modules.Add(module);
+        ModulesFrontToBack.Add(module);
+    }
+
+    public void RemoveModule(ImGuiModule module)
+    {
+        Modules.Remove(module);
+        ModulesFrontToBack.Remove(module);
+    }
+
+    private void BringModuleToFront(ImGuiModule module, ImGuiModule moduleToKeepInputsFor)
+    {
+        ModulesFrontToBack.Remove(module);
+        ModulesFrontToBack.Insert(0, module);
+        for (int i = 0; i < ModulesFrontToBack.Count; i++)
+        {
+            ImGuiModule other = ModulesFrontToBack[i];
+            if (other != module && other != moduleToKeepInputsFor)
+                other.IO.ClearInputKeys();
+        }
+    }
+
+    private unsafe bool DragDropGetPayloadFromSourceContext()
+    {
+        ImGuiContextPtr src_ctx = _ctxDragDropSrc;
+        fixed (ImGuiPayload* dst_payload = &_dragDropPayload)
+        {
+            if (!src_ctx.DragDropActive)
+                return false;
+            if ((src_ctx.DragDropSourceFlags & ImGuiDragDropFlags.PayloadNoCrossContext) != 0)
+                return false;
+            fixed (ImGuiPayload* src_payload = &_ctxDragDropSrc.DragDropPayload)
+            {
+                *dst_payload = *src_payload;
+                dst_payload->Data = ImGui.MemAlloc((nuint)src_payload->DataSize);
+                Buffer.MemoryCopy(src_payload->Data, dst_payload->Data, src_payload->DataSize, src_payload->DataSize);
+            }
+            return true;
+        }
+    }
+
+    private unsafe void DragDropSetPayloadToDestContext(ImGuiContextPtr dstCtx)
+    {
+        Debug.Assert(IsSame(dstCtx, ImGui.GetCurrentContext()));
+        fixed (ImGuiPayload* src_payload = &_dragDropPayload)
+        {
+            if (ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceExtern | ImGuiDragDropFlags.SourceNoPreviewTooltip))
+            {
+                byte* type = stackalloc byte[33];
+                type[0] = src_payload->DataType_0;
+                type[1] = src_payload->DataType_1;
+                type[2] = src_payload->DataType_2;
+                type[3] = src_payload->DataType_3;
+                type[4] = src_payload->DataType_4;
+                type[5] = src_payload->DataType_5;
+                type[6] = src_payload->DataType_6;
+                type[7] = src_payload->DataType_7;
+                type[8] = src_payload->DataType_8;
+                type[9] = src_payload->DataType_9;
+                type[10] = src_payload->DataType_10;
+                type[11] = src_payload->DataType_11;
+                type[12] = src_payload->DataType_12;
+                type[13] = src_payload->DataType_13;
+                type[14] = src_payload->DataType_14;
+                type[15] = src_payload->DataType_15;
+                type[16] = src_payload->DataType_16;
+                type[17] = src_payload->DataType_17;
+                type[18] = src_payload->DataType_18;
+                type[19] = src_payload->DataType_19;
+                type[20] = src_payload->DataType_20;
+                type[21] = src_payload->DataType_21;
+                type[22] = src_payload->DataType_22;
+                type[23] = src_payload->DataType_23;
+                type[24] = src_payload->DataType_24;
+                type[25] = src_payload->DataType_25;
+                type[26] = src_payload->DataType_26;
+                type[27] = src_payload->DataType_27;
+                type[28] = src_payload->DataType_28;
+                type[29] = src_payload->DataType_29;
+                type[30] = src_payload->DataType_30;
+                type[31] = src_payload->DataType_31;
+                type[32] = src_payload->DataType_32;
+                ImGui.SetDragDropPayload(type, src_payload->Data, (nuint)src_payload->DataSize);
+                ImGui.EndDragDropSource();
+            }
+        }
+    }
+
+    private unsafe void DragDropFreePayload(ImGuiPayload* payload)
+    {
+        ImGui.MemFree(payload->Data);
+        payload->Data = null;
+    }
+
+    public unsafe void PreNewFrameUpdateAll()
+    {
+        // Clear transient data
+        _ctxMouseFirst = null;
+        _ctxMouseExclusive = null;
+        _ctxMouseShape = null;
+        _ctxKeyboardExclusive = null;
+        _ctxDragDropSrc = null;
+        _ctxDragDropDst = null;
+        _dragDropPayload.Clear();
+
+        // Sync point (before NewFrame calls)
+        // PASS 1:
+        // - Find out who will receive mouse position (one or multiple contexts)
+        // - FInd out who will change mouse cursor (one context)
+        // - Find out who has an active drag and drop
+        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContext.ModulesFrontToBack)
+        {
+            ImGuiContextPtr ctx = module.Context;
+            ImGuiIOPtr io = module.IO;
+
+            // When hovering a main/shared viewport,
+            // - feed mouse front-to-back until reaching context that has io.WantCaptureMouse.
+            // - track second context to pass drag and drop payload
+            if (io.WantCaptureMouse && _ctxMouseFirst.IsNull)
+                _ctxMouseFirst = ctx;
+            if (!ctx.HoveredWindowBeforeClear.IsNull && _ctxDragDropDst.IsNull)
+                _ctxDragDropDst = ctx;
+
+            // Who owns mouse shape?
+            if (_ctxMouseShape.IsNull && ctx.MouseCursor != ImGuiMouseCursor.Arrow)
+                _ctxMouseShape = ctx;
+
+            // Who owns drag and drop source?
+            if (module.DragDropActive)
+                Log.Message($"Module {module.GUID} has DragDropActive on. ({ctx.DragDropPayload.DataSize} bytes)");
+            if (ctx.DragDropActive)
+                Log.Message($"Context {module.GUID} has DragDropActive on. ({ctx.DragDropPayload.DataSize} bytes)");
+            if (ctx.DragDropActive && (ctx.DragDropSourceFlags & ImGuiDragDropFlags.SourceExtern) == 0 && _ctxDragDropSrc.IsNull)
+                _ctxDragDropSrc = ctx;
+            else if (!ctx.DragDropActive && IsSame(_ctxDragDropSrc, ctx))
+                _ctxDragDropSrc = null;
+        }
+
+        // If no secondary viewport are focused, we'll keep keyboard to top-most context
+        if (_ctxKeyboardExclusive.IsNull)
+            _ctxKeyboardExclusive = ModulesFrontToBack[0].Context;
+
+        // Deep copy payload for replication
+        if (!_ctxDragDropSrc.IsNull)
+            DragDropGetPayloadFromSourceContext();
+        if (!_ctxDragDropDst.IsNull && _dragDropPayload.Data == null)
+            _ctxDragDropDst = null;
+
+        // Bring drag target context to front when using DragDropHold press
+        // FIXME-MULTICONTEXT: Works but change of order means source tooltip not visible anymore...
+        // - Solution 1 ? if user code always submitted drag and drop tooltip derived from payload data
+        //   instead of submitting at drag source location, this wouldn't be a problem at the front
+        //   most context could always display the tooltip. But it's a constraint.
+        // - Solution 2 ? would be a more elaborate composited rendering, where top layer (tooltip)
+        //   of one ImDrawData would be moved to another ImDrawData.
+        // - Solution 3 ? somehow find a way to enforce tooltip always on own viewport, always on top?
+        // Ultimately this is not so important, it's already quite a fun luxury to have cross context DND.
+        #if false
+            if (mcc->CtxDragDropDst && mcc->CtxDragDropDst != mcc->ContextsFrontToBack.front())
+                if (mcc->CtxDragDropDst->DragDropHoldJustPressedId != 0)
+                    ImGuiMultiContextCompositor_BringContextToFront(mcc, mcc->CtxDragDropDst, mcc->ContextsFrontToBack.front());
+        #endif
+
+        // PASS 2:
+        // - Enable/disable mouse interactions on selected contexts.
+        // - Enable/disable mouse cursor change so only 1 context can do it.
+        // - Bring a context to front whenever clicked any of its windows.
+        bool is_above_ctx_with_mouse_first = true;
+        for (int i = 0; i < ModulesFrontToBack.Count; i++)
+        {
+            ImGuiModule module = ModulesFrontToBack[i];
+            ImGuiContextPtr ctx = module.Context;
+            ImGuiIOPtr io = module.IO;
+            bool ctx_is_front = i == 0;
+
+            // Focused secondary viewport or top-most context in shared viewport gets keyboard
+            if (IsSame(_ctxKeyboardExclusive, ctx))
+                io.ConfigFlags &= ~ImGuiConfigFlags.NoKeyboard; // Allow keyboard interactions
+            else
+                io.ConfigFlags |= ImGuiConfigFlags.NoKeyboard; // Disable keyboard interactions
+
+            // Top-most context with MouseCursor shape request gets it
+            if (_ctxMouseShape.IsNull || IsSame(_ctxMouseShape, ctx))
+                io.ConfigFlags &= ~ImGuiConfigFlags.NoMouseCursorChange; // Allow mouse cursor changes
+            else
+                io.ConfigFlags |= ImGuiConfigFlags.NoMouseCursorChange; // Disable mouse cursor changes
+
+            if (!_ctxMouseExclusive.IsNull)
+            {
+                // Single context gets mouse interactions
+                if (IsSame(_ctxMouseExclusive, ctx))
+                    io.ConfigFlags &= ~ImGuiConfigFlags.NoMouse; // Allow mouse interactions
+                else
+                    io.ConfigFlags |= ImGuiConfigFlags.NoMouse; // Disable mouse interactions
+            }
+            else
+            {
+                // Top-most io.WantCaptureMouse context & anything above it gets mouse interactions
+                if (is_above_ctx_with_mouse_first || IsSame(_ctxDragDropDst, ctx))
+                    io.ConfigFlags &= ~ImGuiConfigFlags.NoMouse; // Allow mouse interactions
+                else
+                    io.ConfigFlags |= ImGuiConfigFlags.NoMouse; // Disable mouse interactions
+            }
+
+            // Bring to front on click
+            if ((IsSame(_ctxMouseExclusive, ctx) || IsSame(_ctxMouseFirst, ctx)) && !ctx_is_front)
+            {
+                bool any_mouse_clicked = false; // conceptually a ~ImGui::IsAnyMouseClicked(), not worth adding to API.
+                for (int n = 0; n < io.MouseClicked.Length; n++)
+                    any_mouse_clicked |= io.MouseClicked[n];
+                if (any_mouse_clicked)
+                    BringModuleToFront(module, null);
+            }
+
+            if (IsSame(_ctxMouseFirst, ctx))
+                is_above_ctx_with_mouse_first = false;
+        }
+    }
+
+    // This could technically be registered as a hook, but it would make things too magical.
+    public void PostNewFrameUpdateOne(ImGuiModule module)
+    {
+        // Propagate drag and drop
+        // (against all odds since we are only READING from 'mcc' and writing to our target
+        // context this should be parallel/threading friendly)
+        ImGuiContextPtr ctx = module.Context;
+        if (IsSame(_ctxDragDropDst, ctx) && !IsSame(_ctxDragDropDst, _ctxDragDropSrc))
+            DragDropSetPayloadToDestContext(ctx);
+    }
+
+    public unsafe void PostEndFrameUpdateAll()
+    {
+        // Clear drag and drop payload
+        fixed (ImGuiPayload* dragDropPayload = &_dragDropPayload)
+            if (dragDropPayload->Data != null)
+                DragDropFreePayload(dragDropPayload);
+    }
+
+    private unsafe static bool IsSame(ImGuiContextPtr a, ImGuiContextPtr b) => (IntPtr)a.Handle == (IntPtr)b.Handle;
+}
