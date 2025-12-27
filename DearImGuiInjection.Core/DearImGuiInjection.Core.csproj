@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>netstandard2.1</TargetFrameworks>
     <LangVersion>preview</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
@@ -27,11 +27,23 @@
     <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
     <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
     <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
+    <!-- 
     <PackageReference Include="Hexa.NET.ImGui" Version="2.2.10-*" />
+    -->
+    
+    <Reference Include="Hexa.NET.ImGui">
+      <HintPath>$(HexaDir)Hexa.NET.ImGui.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="HexaGen.Runtime">
+      <HintPath>$(HexaDir)HexaGen.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
     <PackFiles Include="$(TargetDir)*.dll" Exclude="@(PackExclude->'$(TargetDir)%(Identity)*')" />
+    <HexaFiles Include="$(HexaDir)*" />
     <AssetFiles Include="$(MSBuildProjectDirectory)\$(AssetsFolderName)\**\*.*" />
   </ItemGroup>
 
@@ -48,6 +60,7 @@
   <Target Name="PackFilesToDirectory" AfterTargets="Build" Condition="'$(Configuration)'!='Debug' And '$(TargetFramework)'!=''">
     <MakeDir Directories="$(PackDir)" Condition="!Exists('$(PackDir)')" />
     <Copy SourceFiles="@(PackFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(HexaFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(CimguiFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(FasmFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(PackDir)$(AssetsFolderName)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
@@ -57,7 +70,7 @@
   </Target>
   <Target Name="StartSteamGameAfterPacking" AfterTargets="Build" Condition="'$(Configuration)'!='Debug' And '$(StartSteamGameAfterBuild)'=='true' And '$(TargetFramework)'!=''">
     <Message Importance="High" Text="Launching Steam game AppID=$(SteamAppId)..." />
-    <Exec Command='cmd /c start "" "steam://rungameid/$(SteamAppId)"' />
+    <Exec Command="cmd /c start &quot;&quot; &quot;steam://rungameid/$(SteamAppId)&quot;" />
   </Target>
 
 </Project>

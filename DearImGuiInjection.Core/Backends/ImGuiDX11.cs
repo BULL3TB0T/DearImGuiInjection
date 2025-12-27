@@ -97,7 +97,6 @@ internal static class ImGuiDX11
         {
             ImGuiModule module = DearImGuiInjectionCore.MultiContext.ModulesFrontToBack[i];
             ImGui.SetCurrentContext(module.Context);
-            module.DragDropActive = ImGuiP.IsDragDropActive();
             if (!module.IsInitialized)
             {
                 ImGuiImplWin32.Init(_windowHandle);

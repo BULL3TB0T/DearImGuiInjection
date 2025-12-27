@@ -34,7 +34,6 @@ public static class DearImGuiInjectionCore
     internal static ImGuiMultiContextCompositor MultiContext = new();
 
     private static ILoader Loader;
-    private static IntPtr Library;
 
     internal unsafe static bool Init(ILoader loader, ILog log)
     {
@@ -45,15 +44,26 @@ public static class DearImGuiInjectionCore
         ConfigPath = Loader.ConfigPath;
         AssemblyPath = Loader.AssemblyPath;
         AssetsPath = Path.Combine(AssemblyPath, "Assets");
-        string libraryPath = Path.Combine(AssemblyPath, $"cimgui-{(Environment.Is64BitProcess ? "x64" : "x86")}.dll");
+        string libraryFileName = $"cimgui-{(Environment.Is64BitProcess ? "x64" : "x86")}.dll";
+        string libraryPath = Path.Combine(AssemblyPath, libraryFileName);
         if (!File.Exists(libraryPath))
         {
             Log.Error("Cimgui not found. Expected path: " + libraryPath);
             return false;
         }
+        LibraryLoader.CustomLoadFolders.Add(AssemblyPath);
+        LibraryLoader.InterceptLibraryName += (ref string libraryName) =>
+        {
+            if (libraryName == ImGui.GetLibraryName())
+            {
+                libraryName = libraryFileName;
+                return true;
+            }
+            return false;
+        };
         LibraryLoader.ResolvePath += (string libraryName, out string pathToLibrary) =>
         {
-            if (libraryName.StartsWith("cimgui"))
+            if (libraryName == libraryFileName)
             {
                 pathToLibrary = libraryPath;
                 return true;
@@ -61,8 +71,6 @@ public static class DearImGuiInjectionCore
             pathToLibrary = null;
             return false;
         };
-        Library = Kernel32.LoadLibrary(libraryPath);
-        ImGui.InitApi(new NativeLibraryContext(Library));
         IsInitialized = true;
         return true;
     }
@@ -86,8 +94,6 @@ public static class DearImGuiInjectionCore
             ImGui.DestroyContext(module.Context);
             module.Context = null;
         }
-        ImGui.FreeApi();
-        Kernel32.FreeLibrary(Library);
     }
 
     public unsafe static ImGuiModule RegisterModule(string GUID, Action onInit = null, Action onDispose = null, Action onRender = null)

@@ -17,6 +17,9 @@
     <LibsFolderName>Libraries</LibsFolderName>
     <LibsDir>$(SolutionDir)$(LibsFolderName)\</LibsDir>
 
+    <HexaFolderName>Hexa</HexaFolderName>
+    <HexaDir>$(LibsDir)$(HexaFolderName)\</HexaDir>
+
     <CimguiFolderName>Cimgui</CimguiFolderName>
     <CimguiDir>$(LibsDir)$(CimguiFolderName)\</CimguiDir>
 

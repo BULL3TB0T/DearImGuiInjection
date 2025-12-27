@@ -155,10 +155,6 @@ internal sealed class ImGuiMultiContextCompositor
                 _ctxMouseShape = ctx;
 
             // Who owns drag and drop source?
-            if (module.DragDropActive)
-                Log.Message($"Module {module.GUID} has DragDropActive on. ({ctx.DragDropPayload.DataSize} bytes)");
-            if (ctx.DragDropActive)
-                Log.Message($"Context {module.GUID} has DragDropActive on. ({ctx.DragDropPayload.DataSize} bytes)");
             if (ctx.DragDropActive && (ctx.DragDropSourceFlags & ImGuiDragDropFlags.SourceExtern) == 0 && _ctxDragDropSrc.IsNull)
                 _ctxDragDropSrc = ctx;
             else if (!ctx.DragDropActive && IsSame(_ctxDragDropSrc, ctx))

@@ -13,7 +13,6 @@ public sealed class ImGuiModule
     public ImGuiIOPtr IO;
 
     public bool UnfocusNextFrame = true;
-    internal bool DragDropActive;
 
     internal Action OnInit;
     internal Action OnRender;
