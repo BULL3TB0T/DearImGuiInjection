@@ -41,11 +41,6 @@ internal static class ImGuiDX11
     private static readonly IntPtr _zClearAllPtr = Marshal.GetFunctionPointerForDelegate(_zClearAllDel);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private unsafe delegate void ReadInitDelegate(ImGuiContext* ctx, ImGuiSettingsHandler* handler);
-    private unsafe static readonly ReadInitDelegate _zReadInitDel = Z_ReadInit;
-    private static readonly IntPtr _zReadInitPtr = Marshal.GetFunctionPointerForDelegate(_zReadInitDel);
-
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private unsafe delegate void* ReadOpenDelegate(ImGuiContext* ctx, ImGuiSettingsHandler* handler, byte* name);
     private unsafe static readonly ReadOpenDelegate _zReadOpenDel = Z_ReadOpen;
     private static readonly IntPtr _zReadOpenPtr = Marshal.GetFunctionPointerForDelegate(_zReadOpenDel);
@@ -66,8 +61,6 @@ internal static class ImGuiDX11
     private static readonly IntPtr _zWriteAllPtr = Marshal.GetFunctionPointerForDelegate(_zWriteAllDel);
 
     private static unsafe void Z_ClearAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler) => _settingsData.Clear();
-
-    private static unsafe void Z_ReadInit(ImGuiContext* ctx, ImGuiSettingsHandler* handler) => _settingsData.Clear();
 
     private static unsafe void* Z_ReadOpen(ImGuiContext* ctx, ImGuiSettingsHandler* handler, byte* name)
     {
@@ -96,6 +89,8 @@ internal static class ImGuiDX11
 
     private static unsafe void Z_ApplyAll(ImGuiContext* ctx, ImGuiSettingsHandler* handler)
     {
+        if (_settingsData.Count != _orderedModules.Count)
+            return;
         for (int i = 0; i < _orderedModules.Count; i++)
         {
             ImGuiModule module = _orderedModules[i];
@@ -296,10 +291,10 @@ internal static class ImGuiDX11
                         _settingsTypeNamePtr = Marshal.StringToHGlobalAnsi(_settingsTypeName);
                     ImGuiSettingsHandler* handler = 
                         (ImGuiSettingsHandler*)Marshal.AllocHGlobal(sizeof(ImGuiSettingsHandler));
+                    *handler = default;
                     handler->TypeName = (byte*)_settingsTypeNamePtr;
                     handler->TypeHash = ImGuiP.ImHashStr((byte*)_settingsTypeNamePtr);
                     handler->ClearAllFn = (void*)_zClearAllPtr;
-                    handler->ReadInitFn = (void*)_zReadInitPtr;
                     handler->ReadOpenFn = (void*)_zReadOpenPtr;
                     handler->ReadLineFn = (void*)_zReadLinePtr;
                     handler->ApplyAllFn = (void*)_zApplyAllPtr;
