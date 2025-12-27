@@ -672,7 +672,7 @@ internal static class ImGuiImplDX11
 
         // Setup backend capabilities flags
         Data bd = InitBackendData();
-        io.BackendRendererName = (byte*)Marshal.StringToHGlobalAnsi("imgui_impl_dx11_c#");
+        io.BackendRendererName = (byte*)Marshal.StringToHGlobalAnsi($"imgui_impl_dx11_{DearImGuiInjectionCore.HexaVersion}");
         io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
         io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;   // We can honor ImGuiPlatformIO::Textures[] requests during render.
 

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0</TargetFrameworks>
     <LangVersion>preview</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
@@ -30,6 +30,7 @@
     <!-- 
     <PackageReference Include="Hexa.NET.ImGui" Version="2.2.10-*" />
     -->
+    <PackageReference Include="System.Memory" Version="4.6.3" />
     
     <Reference Include="Hexa.NET.ImGui">
       <HintPath>$(HexaDir)Hexa.NET.ImGui.dll</HintPath>

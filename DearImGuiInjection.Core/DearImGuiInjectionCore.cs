@@ -31,6 +31,8 @@ public static class DearImGuiInjectionCore
     public static string AssemblyPath { get; private set; }
     public static string AssetsPath { get; private set; }
 
+    internal static string HexaVersion = "hexa_net (v2.2.11-pre)";
+
     internal static ImGuiMultiContextCompositor MultiContext = new();
 
     private static ILoader Loader;

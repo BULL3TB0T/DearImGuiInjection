@@ -95,7 +95,7 @@ internal static class ImGuiImplWin32
 
         // Setup backend capabilities flags
         Data bd = InitBackendData();
-        io.BackendPlatformName = (byte*)Marshal.StringToHGlobalAnsi("imgui_impl_win32_c#");
+        io.BackendPlatformName = (byte*)Marshal.StringToHGlobalAnsi($"imgui_impl_win32_{DearImGuiInjectionCore.HexaVersion}");
         io.BackendFlags |= ImGuiBackendFlags.HasMouseCursors;         // We can honor GetMouseCursor() values (optional)
         io.BackendFlags |= ImGuiBackendFlags.HasSetMousePos;          // We can honor io.WantSetMousePos requests (optional, rarely used)
 
