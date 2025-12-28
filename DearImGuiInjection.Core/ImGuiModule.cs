@@ -6,7 +6,7 @@ namespace DearImGuiInjection;
 
 public sealed class ImGuiModule
 {
-    public string GUID { get; internal set; }
+    public string Id { get; internal set; }
 
     internal bool IsInitialized;
 
@@ -19,9 +19,9 @@ public sealed class ImGuiModule
     public Action OnRender;
     public Func<IntPtr, WindowMessage, IntPtr, IntPtr, bool> OnWndProc;
 
-    internal ImGuiModule(string GUID) => this.GUID = GUID;
+    internal ImGuiModule(string Id) => this.Id = Id;
 
-    private bool Equals(ImGuiModule other) => GUID == other.GUID;
+    private bool Equals(ImGuiModule module) => Id == module.Id;
     public override bool Equals(object obj) => Equals(obj as ImGuiModule);
-    public override int GetHashCode() => GUID.GetHashCode();
+    public override int GetHashCode() => Id.GetHashCode();
 }

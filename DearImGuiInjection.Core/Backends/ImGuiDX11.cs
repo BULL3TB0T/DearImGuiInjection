@@ -70,6 +70,7 @@ internal static class ImGuiDX11
             ImGui.SetCurrentContext(module.Context);
             ImGuiImplDX11.Shutdown();
             ImGuiImplWin32.Shutdown();
+            ImGui.DestroyPlatformWindows();
         }
         _renderTargetView?.Dispose();
         _renderTargetView = null;

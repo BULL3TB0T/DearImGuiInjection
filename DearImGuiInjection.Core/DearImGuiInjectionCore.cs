@@ -90,30 +90,30 @@ public static class DearImGuiInjectionCore
 
     public static void MultiContextCompositorShowDebugWindow() => MultiContextCompositor.ShowDebugWindow();
 
-    public unsafe static ImGuiModule RegisterModule(string GUID)
+    public unsafe static ImGuiModule CreateModule(string Id)
     {
-        if (string.IsNullOrEmpty(GUID) || MultiContextCompositor.Modules.Any(x => x.GUID == GUID))
+        if (string.IsNullOrEmpty(Id) || MultiContextCompositor.Modules.Any(x => x.Id == Id))
         {
-            Log.Warning($"Module \"{GUID}\" already has been registered.");
+            Log.Warning($"Module \"{Id}\" already has been registered.");
             return null;
         }
-        ImGuiModule module = new ImGuiModule(GUID);
+        ImGuiModule module = new ImGuiModule(Id);
         module.Context = ImGui.CreateContext();
         ImGui.SetCurrentContext(module.Context);
         var io = ImGui.GetIO();
         module.IO = io;
-        io.IniFilename = (byte*)Marshal.StringToHGlobalAnsi($"imgui_{GUID}.ini");
+        io.IniFilename = (byte*)Marshal.StringToHGlobalAnsi($"imgui_{Id}.ini");
         module.PlatformIO = ImGui.GetPlatformIO();
         MultiContextCompositor.AddModule(module);
         return module;
     }
 
-    public static void UnregisterModule(string GUID)
+    public static void DestroyModule(string Id)
     {
-        ImGuiModule module = MultiContextCompositor.Modules.FirstOrDefault(x => x.GUID == GUID);
-        if (string.IsNullOrEmpty(GUID) || module == null)
+        ImGuiModule module = MultiContextCompositor.Modules.FirstOrDefault(x => x.Id == Id);
+        if (string.IsNullOrEmpty(Id) || module == null)
         {
-            Log.Warning($"Module \"{GUID}\" is not registered.");
+            Log.Warning($"Module \"{Id}\" is not registered.");
             return;
         }
         MultiContextCompositor.RemoveModule(module);
@@ -121,6 +121,7 @@ public static class DearImGuiInjectionCore
         // Implement this differently later once we have more renderers.
         ImGuiImplDX11.Shutdown();
         ImGuiImplWin32.Shutdown();
+        ImGui.DestroyPlatformWindows();
         module.OnDispose?.Invoke();
         module.OnDispose = null;
         ImGui.DestroyContext();

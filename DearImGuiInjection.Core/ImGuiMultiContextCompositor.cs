@@ -269,12 +269,12 @@ internal sealed class ImGuiMultiContextCompositor
         ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.0f, 0.0f, 0.0f, 1.0f));
         ImGui.Begin("Multi-Context Compositor Overlay", ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoInputs);
         ImGui.SeparatorText("Multi-Context Compositor");
-        ImGui.Text("Front: " + ModulesFrontToBack.First().GUID);
-        ImGui.Text("MousePos first: " + (!_ctxMouseFirst.IsNull ? Modules.First(x => IsSame(x.Context, _ctxMouseFirst)).GUID : ""));
-        ImGui.Text("MousePos excl.: " + (!_ctxMouseExclusive.IsNull ? Modules.First(x => IsSame(x.Context, _ctxMouseExclusive)).GUID : ""));
-        ImGui.Text("Keyboard excl.: " + (!_ctxKeyboardExclusive.IsNull ? Modules.First(x => IsSame(x.Context, _ctxKeyboardExclusive)).GUID : ""));
-        ImGui.Text("DragDrop src: " + (!_ctxDragDropSrc.IsNull ? Modules.First(x => IsSame(x.Context, _ctxDragDropSrc)).GUID : ""));
-        ImGui.Text("DragDrop dst: " + (!_ctxDragDropDst.IsNull ? Modules.First(x => IsSame(x.Context, _ctxDragDropDst)).GUID : ""));
+        ImGui.Text("Front: " + ModulesFrontToBack.First().Id);
+        ImGui.Text("MousePos first: " + (!_ctxMouseFirst.IsNull ? Modules.First(x => IsSame(x.Context, _ctxMouseFirst)).Id : ""));
+        ImGui.Text("MousePos excl.: " + (!_ctxMouseExclusive.IsNull ? Modules.First(x => IsSame(x.Context, _ctxMouseExclusive)).Id : ""));
+        ImGui.Text("Keyboard excl.: " + (!_ctxKeyboardExclusive.IsNull ? Modules.First(x => IsSame(x.Context, _ctxKeyboardExclusive)).Id : ""));
+        ImGui.Text("DragDrop src: " + (!_ctxDragDropSrc.IsNull ? Modules.First(x => IsSame(x.Context, _ctxDragDropSrc)).Id : ""));
+        ImGui.Text("DragDrop dst: " + (!_ctxDragDropDst.IsNull ? Modules.First(x => IsSame(x.Context, _ctxDragDropDst)).Id : ""));
         ImGui.End();
         ImGui.PopStyleColor(2);
     }
