@@ -140,6 +140,7 @@ internal static class ImGuiImplWin32
         Data bd = GetBackendData();
         Debug.Assert(bd != null, "No platform backend to shutdown, or already shutdown?");
         var io = ImGui.GetIO();
+        var platform_io = ImGui.GetPlatformIO();
 
         // Unload XInput library
         if (bd.XInputDLL != IntPtr.Zero)
@@ -147,6 +148,7 @@ internal static class ImGuiImplWin32
 
         Marshal.FreeHGlobal((IntPtr)io.BackendPlatformName);
         io.BackendFlags &= ~(ImGuiBackendFlags.HasMouseCursors | ImGuiBackendFlags.HasSetMousePos | ImGuiBackendFlags.HasGamepad);
+        platform_io.ClearPlatformHandlers();
         FreeBackendData();
     }
 

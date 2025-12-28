@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 
 namespace DearImGuiInjection.Windows;
 
-internal enum VirtualKey : int
+public enum VirtualKey : int
 {
     VK_LBUTTON = 0x01,
     VK_RBUTTON = 0x02,
@@ -230,7 +230,7 @@ internal enum VirtualKey : int
     VK_OEM_CLEAR = 0xFE,
 }
 
-internal enum WindowMessage : uint
+public enum WindowMessage : uint
 {
     WM_NULL = 0x0000,
 
@@ -716,24 +716,8 @@ internal enum WindowMessage : uint
 
 }
 
-internal enum ShowWindowCommand : int
-{
-    Hide,
-    ShowNormal,
-    ShowMinimized,
-    ShowMaximized,
-    ShowNoActivate,
-    Show,
-    Minimize,
-    ShowMinNoActive,
-    ShowNA,
-    Restore,
-    ShowDefault,
-    ForceMinimize
-}
-
 [StructLayout(LayoutKind.Sequential)]
-internal struct POINT
+public struct POINT
 {
     public int X;
     public int Y;
@@ -746,7 +730,7 @@ internal struct POINT
 }
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct RECT
+public struct RECT
 {
     public int Left;
     public int Top;

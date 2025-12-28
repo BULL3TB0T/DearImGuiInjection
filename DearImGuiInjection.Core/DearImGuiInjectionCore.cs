@@ -1,18 +1,13 @@
 ﻿using DearImGuiInjection.Backends;
 using DearImGuiInjection.Renderers;
-using DearImGuiInjection.Windows;
 using Hexa.NET.ImGui;
 using HexaGen.Runtime;
 using System;
-using System.Collections.Generic;
-using System.Drawing;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Numerics;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInEx5")]
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInExIL2CPP")]
@@ -33,7 +28,7 @@ public static class DearImGuiInjectionCore
 
     internal static string HexaVersion = "hexa_net (v2.2.11-pre)";
 
-    internal static ImGuiMultiContextCompositor MultiContext = new();
+    internal static ImGuiMultiContextCompositor MultiContextCompositor = new();
 
     private static ILoader Loader;
 
@@ -49,10 +44,7 @@ public static class DearImGuiInjectionCore
         string libraryFileName = $"cimgui-{(Environment.Is64BitProcess ? "x64" : "x86")}.dll";
         string libraryPath = Path.Combine(AssemblyPath, libraryFileName);
         if (!File.Exists(libraryPath))
-        {
-            Log.Error("Cimgui not found. Expected path: " + libraryPath);
-            return false;
-        }
+            throw new FileNotFoundException("Cimgui not found. Expected path: " + libraryPath);
         LibraryLoader.CustomLoadFolders.Add(AssemblyPath);
         LibraryLoader.InterceptLibraryName += (ref string libraryName) =>
         {
@@ -81,45 +73,56 @@ public static class DearImGuiInjectionCore
     {
         if (!IsInitialized)
             return;
-        foreach (ImGuiModule module in MultiContext.Modules)
+        foreach (ImGuiModule module in MultiContextCompositor.Modules)
         {
             module.OnInit = null;
             module.OnRender = null;
         }
         RendererManager.Shutdown();
-        foreach (ImGuiModule module in MultiContext.Modules)
+        foreach (ImGuiModule module in MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
             module.OnDispose?.Invoke();
             module.OnDispose = null;
-            MultiContext.RemoveModule(module);
-            ImGui.DestroyContext(module.Context);
-            module.Context = null;
+            ImGui.DestroyContext();
         }
     }
 
-    public unsafe static ImGuiModule RegisterModule(string GUID, Action onInit = null, Action onDispose = null, Action onRender = null)
+    public static void MultiContextCompositorShowDebugWindow() => MultiContextCompositor.ShowDebugWindow();
+
+    public unsafe static ImGuiModule RegisterModule(string GUID)
     {
-        if (onRender == null)
+        if (string.IsNullOrEmpty(GUID) || MultiContextCompositor.Modules.Any(x => x.GUID == GUID))
         {
-            Log.Error($"\"{GUID}\": OnRender is required.");
-            return null;
-        }
-        if (string.IsNullOrEmpty(GUID) || MultiContext.Modules.Any(x => x.GUID == GUID))
-        {
-            Log.Warning($"\"{GUID}\": Already been registered.");
+            Log.Warning($"Module \"{GUID}\" already has been registered.");
             return null;
         }
         ImGuiModule module = new ImGuiModule(GUID);
-        module.OnInit = onInit;
-        module.OnDispose = onDispose;
-        module.OnRender = onRender;
         module.Context = ImGui.CreateContext();
         ImGui.SetCurrentContext(module.Context);
         var io = ImGui.GetIO();
         module.IO = io;
         io.IniFilename = (byte*)Marshal.StringToHGlobalAnsi($"imgui_{GUID}.ini");
-        MultiContext.AddModule(module);
+        module.PlatformIO = ImGui.GetPlatformIO();
+        MultiContextCompositor.AddModule(module);
         return module;
+    }
+
+    public static void UnregisterModule(string GUID)
+    {
+        ImGuiModule module = MultiContextCompositor.Modules.FirstOrDefault(x => x.GUID == GUID);
+        if (string.IsNullOrEmpty(GUID) || module == null)
+        {
+            Log.Warning($"Module \"{GUID}\" is not registered.");
+            return;
+        }
+        MultiContextCompositor.RemoveModule(module);
+        ImGui.SetCurrentContext(module.Context);
+        // Implement this differently later once we have more renderers.
+        ImGuiImplDX11.Shutdown();
+        ImGuiImplWin32.Shutdown();
+        module.OnDispose?.Invoke();
+        module.OnDispose = null;
+        ImGui.DestroyContext();
     }
 }

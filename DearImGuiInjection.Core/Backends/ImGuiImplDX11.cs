@@ -688,16 +688,16 @@ internal static class ImGuiImplDX11
         Data bd = GetBackendData();
         Debug.Assert(bd != null, "No renderer backend to shutdown, or already shutdown?");
         var io = ImGui.GetIO();
+        var platform_io = ImGui.GetPlatformIO();
 
         InvalidateDeviceObjects();
-
         // we don't own these, so no Dispose()
         bd.Device = null;
         bd.DeviceContext = null;
 
         Marshal.FreeHGlobal((IntPtr)io.BackendRendererName);
-        io.BackendFlags &= ~ImGuiBackendFlags.RendererHasVtxOffset;
-        io.BackendFlags &= ~ImGuiBackendFlags.RendererHasTextures;
+        io.BackendFlags &= ~(ImGuiBackendFlags.RendererHasVtxOffset | ImGuiBackendFlags.RendererHasTextures);
+        platform_io.ClearRendererHandlers();
         FreeBackendData();
     }
 

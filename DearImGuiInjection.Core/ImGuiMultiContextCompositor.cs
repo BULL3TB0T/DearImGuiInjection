@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -18,10 +19,10 @@ internal sealed class ImGuiMultiContextCompositor
 
     private ImGuiContextPtr _ctxMouseFirst = null;
     private ImGuiContextPtr _ctxMouseExclusive = null;
-    public ImGuiContextPtr _ctxMouseShape = null;
+    private ImGuiContextPtr _ctxMouseShape = null;
     private ImGuiContextPtr _ctxKeyboardExclusive = null;
-    public ImGuiContextPtr _ctxDragDropSrc = null;
-    public ImGuiContextPtr _ctxDragDropDst = null;
+    private ImGuiContextPtr _ctxDragDropSrc = null;
+    private ImGuiContextPtr _ctxDragDropDst = null;
     private ImGuiPayload _dragDropPayload;
 
     public void AddModule(ImGuiModule module)
@@ -137,7 +138,7 @@ internal sealed class ImGuiMultiContextCompositor
         // - Find out who will receive mouse position (one or multiple contexts)
         // - FInd out who will change mouse cursor (one context)
         // - Find out who has an active drag and drop
-        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContext.ModulesFrontToBack)
+        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack)
         {
             ImGuiContextPtr ctx = module.Context;
             ImGuiIOPtr io = module.IO;
@@ -163,7 +164,7 @@ internal sealed class ImGuiMultiContextCompositor
 
         // If no secondary viewport are focused, we'll keep keyboard to top-most context
         if (_ctxKeyboardExclusive.IsNull)
-            _ctxKeyboardExclusive = ModulesFrontToBack[0].Context;
+            _ctxKeyboardExclusive = ModulesFrontToBack.First().Context;
 
         // Deep copy payload for replication
         if (!_ctxDragDropSrc.IsNull)
@@ -180,11 +181,11 @@ internal sealed class ImGuiMultiContextCompositor
         //   of one ImDrawData would be moved to another ImDrawData.
         // - Solution 3 ? somehow find a way to enforce tooltip always on own viewport, always on top?
         // Ultimately this is not so important, it's already quite a fun luxury to have cross context DND.
-        #if false
-            if (mcc->CtxDragDropDst && mcc->CtxDragDropDst != mcc->ContextsFrontToBack.front())
-                if (mcc->CtxDragDropDst->DragDropHoldJustPressedId != 0)
-                    ImGuiMultiContextCompositor_BringContextToFront(mcc, mcc->CtxDragDropDst, mcc->ContextsFrontToBack.front());
-        #endif
+#if false
+        if (!_ctxDragDropDst.IsNull && !IsSame(_ctxDragDropDst, ModulesFrontToBack.First().Context))
+            if (_ctxDragDropDst.DragDropHoldJustPressedId != 0)
+                BringModuleToFront(Modules.First(x => IsSame(x.Context, _ctxDragDropDst)), ModulesFrontToBack.First());
+#endif
 
         // PASS 2:
         // - Enable/disable mouse interactions on selected contexts.
@@ -259,6 +260,23 @@ internal sealed class ImGuiMultiContextCompositor
         fixed (ImGuiPayload* dragDropPayload = &_dragDropPayload)
             if (dragDropPayload->Data != null)
                 DragDropFreePayload(dragDropPayload);
+    }
+
+    public void ShowDebugWindow()
+    {
+        ImGui.SetNextWindowPos(ImGui.GetMainViewport().Pos);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, new Vector4(1.0f, 1.0f, 1.0f, 0.5f));
+        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.0f, 0.0f, 0.0f, 1.0f));
+        ImGui.Begin("Multi-Context Compositor Overlay", ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoInputs);
+        ImGui.SeparatorText("Multi-Context Compositor");
+        ImGui.Text("Front: " + ModulesFrontToBack.First().GUID);
+        ImGui.Text("MousePos first: " + (!_ctxMouseFirst.IsNull ? Modules.First(x => IsSame(x.Context, _ctxMouseFirst)).GUID : ""));
+        ImGui.Text("MousePos excl.: " + (!_ctxMouseExclusive.IsNull ? Modules.First(x => IsSame(x.Context, _ctxMouseExclusive)).GUID : ""));
+        ImGui.Text("Keyboard excl.: " + (!_ctxKeyboardExclusive.IsNull ? Modules.First(x => IsSame(x.Context, _ctxKeyboardExclusive)).GUID : ""));
+        ImGui.Text("DragDrop src: " + (!_ctxDragDropSrc.IsNull ? Modules.First(x => IsSame(x.Context, _ctxDragDropSrc)).GUID : ""));
+        ImGui.Text("DragDrop dst: " + (!_ctxDragDropDst.IsNull ? Modules.First(x => IsSame(x.Context, _ctxDragDropDst)).GUID : ""));
+        ImGui.End();
+        ImGui.PopStyleColor(2);
     }
 
     private unsafe static bool IsSame(ImGuiContextPtr a, ImGuiContextPtr b) => (IntPtr)a.Handle == (IntPtr)b.Handle;

@@ -27,16 +27,27 @@ internal static class ImGuiDX11
     private static IntPtr WndProcHandler(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam)
     {
         IntPtr result = IntPtr.Zero;
-        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContext.Modules)
+        bool wantCaptureMouse = false;
+        bool wantCaptureKeyboard = false;
+        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             var io = module.IO;
-            if (ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, io) == (IntPtr)1)
-                result = (IntPtr)1;
-            if (io.WantCaptureMouse || io.WantCaptureKeyboard)
-                result = (IntPtr)1;
+            IntPtr handlerResult = ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, io);
+            if (result == IntPtr.Zero && handlerResult != IntPtr.Zero)
+                result = handlerResult;
+            if (module.OnWndProc != null)
+            {
+                bool modResult = module.OnWndProc(hWnd, uMsg, wParam, lParam);
+                if (result == IntPtr.Zero && modResult)
+                    result = (IntPtr)1;
+            }
+            wantCaptureMouse |= io.WantCaptureMouse;
+            wantCaptureKeyboard |= io.WantCaptureKeyboard;
         }
-        if (result == (IntPtr)1)
-            return (IntPtr)1;
+        if (wantCaptureMouse || wantCaptureKeyboard)
+            result = (IntPtr)1;
+        if (result != IntPtr.Zero)
+            return result;
         return User32.CallWindowProc(_originalWindowProc, hWnd, uMsg, wParam, lParam);
     }
 
@@ -54,7 +65,7 @@ internal static class ImGuiDX11
         DX11Renderer.OnPresent -= OnPresent;
         if (!DearImGuiInjectionCore.IsInitialized)
             return;
-        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContext.Modules)
+        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
             ImGuiImplDX11.Shutdown();
@@ -92,32 +103,36 @@ internal static class ImGuiDX11
             _renderTargetView = new RenderTargetView(_device, backBuffer);
         }
         _deviceContext.OutputMerger.SetRenderTargets(_renderTargetView);
-        DearImGuiInjectionCore.MultiContext.PreNewFrameUpdateAll();
-        for (int i = DearImGuiInjectionCore.MultiContext.ModulesFrontToBack.Count - 1; i >= 0; i--)
+        DearImGuiInjectionCore.MultiContextCompositor.PreNewFrameUpdateAll();
+        for (int i = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack.Count - 1; i >= 0; i--)
         {
-            ImGuiModule module = DearImGuiInjectionCore.MultiContext.ModulesFrontToBack[i];
+            ImGuiModule module = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack[i];
             ImGui.SetCurrentContext(module.Context);
             if (!module.IsInitialized)
             {
                 ImGuiImplWin32.Init(_windowHandle);
                 ImGuiImplDX11.Init(_device.NativePointer, _deviceContext.NativePointer);
                 module.OnInit?.Invoke();
-                module.IsInitialized = true;
             }
             ImGuiImplWin32.NewFrame();
             ImGuiImplDX11.NewFrame();
             ImGui.NewFrame();
-            DearImGuiInjectionCore.MultiContext.PostNewFrameUpdateOne(module);
-            module.OnRender.Invoke();
-            ImGui.Render();
+            DearImGuiInjectionCore.MultiContextCompositor.PostNewFrameUpdateOne(module);
+            if (module.OnRender != null)
+            {
+                module.OnRender.Invoke();
+                ImGui.Render();
+            }
+            else
+                ImGui.EndFrame();
             ImGuiImplDX11.RenderDrawData(ImGui.GetDrawData().Handle);
-            if (module.UnfocusNextFrame)
+            if (!module.IsInitialized)
             {
                 ImGuiP.FocusWindow(null);
-                module.UnfocusNextFrame = false;
+                module.IsInitialized = true;
             }
         }
-        DearImGuiInjectionCore.MultiContext.PostEndFrameUpdateAll();
+        DearImGuiInjectionCore.MultiContextCompositor.PostEndFrameUpdateAll();
     }
 
     private static void OnPreResizeBuffers(SwapChain swapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapchainFlags)
@@ -126,7 +141,7 @@ internal static class ImGuiDX11
             return;
         _renderTargetView?.Dispose();
         _renderTargetView = null;
-        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContext.Modules)
+        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
             ImGuiImplDX11.InvalidateDeviceObjects();
@@ -137,7 +152,7 @@ internal static class ImGuiDX11
     {
         if (!DearImGuiInjectionCore.IsInitialized)
             return;
-        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContext.Modules)
+        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
             ImGuiImplDX11.CreateDeviceObjects();
