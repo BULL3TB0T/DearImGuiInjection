@@ -16,10 +16,6 @@ using Device = SharpDX.Direct3D11.Device;
 
 namespace DearImGuiInjection.Renderers;
 
-/// <summary>
-/// Contains a full list of IDXGISwapChain functions to be used
-/// as an indexer into the SwapChain Virtual Function Table entries.
-/// </summary>
 internal enum IDXGISwapChain
 {
     // IUnknown

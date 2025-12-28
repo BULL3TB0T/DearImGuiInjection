@@ -1,5 +1,6 @@
 ﻿using DearImGuiInjection.Backends;
 using DearImGuiInjection.Renderers;
+using DearImGuiInjection.Textures;
 using Hexa.NET.ImGui;
 using HexaGen.Runtime;
 using System;
@@ -22,13 +23,14 @@ public static class DearImGuiInjectionCore
 
     public static bool IsInitialized { get; internal set; }
 
+    public static ImGuiMultiContextCompositor MultiContextCompositor;
+    public static ITextureManager TextureManager;
+
     public static string ConfigPath { get; private set; }
     public static string AssemblyPath { get; private set; }
     public static string AssetsPath { get; private set; }
 
     internal static string HexaVersion = "hexa_net (v2.2.11-pre)";
-
-    internal static ImGuiMultiContextCompositor MultiContextCompositor = new();
 
     private static ILoader Loader;
 
@@ -66,6 +68,7 @@ public static class DearImGuiInjectionCore
             return false;
         };
         IsInitialized = true;
+        MultiContextCompositor = new();
         return true;
     }
 
@@ -82,13 +85,18 @@ public static class DearImGuiInjectionCore
         foreach (ImGuiModule module in MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
-            module.OnDispose?.Invoke();
+            try
+            {
+                module.OnDispose?.Invoke();
+            }
+            catch (Exception e)
+            {
+                Log.Error($"Module \"{module.Id}\" OnDispose threw an exception: {e}");
+            }
             module.OnDispose = null;
             ImGui.DestroyContext();
         }
     }
-
-    public static void MultiContextCompositorShowDebugWindow() => MultiContextCompositor.ShowDebugWindow();
 
     public unsafe static ImGuiModule CreateModule(string Id)
     {
@@ -122,7 +130,14 @@ public static class DearImGuiInjectionCore
         ImGuiImplDX11.Shutdown();
         ImGuiImplWin32.Shutdown();
         ImGui.DestroyPlatformWindows();
-        module.OnDispose?.Invoke();
+        try
+        {
+            module.OnDispose?.Invoke();
+        }
+        catch (Exception e)
+        {
+            Log.Error($"Module \"{module.Id}\" OnDispose threw an exception: {e}");
+        }
         module.OnDispose = null;
         ImGui.DestroyContext();
     }

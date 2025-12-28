@@ -1,4 +1,6 @@
-﻿namespace DearImGuiInjection.Renderers;
+﻿using System;
+
+namespace DearImGuiInjection.Renderers;
 
 public enum RendererKind
 {
@@ -6,13 +8,11 @@ public enum RendererKind
     DX11
 }
 
-internal interface IRenderer
+internal interface IRenderer : IDisposable
 {
     public RendererKind Kind { get; }
 
     public bool IsSupported();
 
     public void Init();
-
-    public void Dispose();
 }

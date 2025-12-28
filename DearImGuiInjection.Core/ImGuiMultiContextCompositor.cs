@@ -12,10 +12,10 @@ namespace DearImGuiInjection;
 // Multi-Context Compositor v0.11, for Dear ImGui
 // Get latest version at http://www.github.com/ocornut/imgui_club
 
-internal sealed class ImGuiMultiContextCompositor
+public sealed class ImGuiMultiContextCompositor
 {
-    public readonly List<ImGuiModule> Modules = new();
-    public readonly List<ImGuiModule> ModulesFrontToBack = new();
+    internal readonly List<ImGuiModule> Modules = new();
+    internal readonly List<ImGuiModule> ModulesFrontToBack = new();
 
     private ImGuiContextPtr _ctxMouseFirst = null;
     private ImGuiContextPtr _ctxMouseExclusive = null;
@@ -25,14 +25,14 @@ internal sealed class ImGuiMultiContextCompositor
     private ImGuiContextPtr _ctxDragDropDst = null;
     private ImGuiPayload _dragDropPayload;
 
-    public void AddModule(ImGuiModule module)
+    internal void AddModule(ImGuiModule module)
     {
         Debug.Assert(!Modules.Contains(module));
         Modules.Add(module);
         ModulesFrontToBack.Add(module);
     }
 
-    public void RemoveModule(ImGuiModule module)
+    internal void RemoveModule(ImGuiModule module)
     {
         Modules.Remove(module);
         ModulesFrontToBack.Remove(module);
@@ -122,7 +122,7 @@ internal sealed class ImGuiMultiContextCompositor
         payload->Data = null;
     }
 
-    public unsafe void PreNewFrameUpdateAll()
+    internal unsafe void PreNewFrameUpdateAll()
     {
         // Clear transient data
         _ctxMouseFirst = null;
@@ -244,7 +244,7 @@ internal sealed class ImGuiMultiContextCompositor
     }
 
     // This could technically be registered as a hook, but it would make things too magical.
-    public void PostNewFrameUpdateOne(ImGuiModule module)
+    internal void PostNewFrameUpdateOne(ImGuiModule module)
     {
         // Propagate drag and drop
         // (against all odds since we are only READING from 'mcc' and writing to our target
@@ -254,7 +254,7 @@ internal sealed class ImGuiMultiContextCompositor
             DragDropSetPayloadToDestContext(ctx);
     }
 
-    public unsafe void PostEndFrameUpdateAll()
+    internal unsafe void PostEndFrameUpdateAll()
     {
         // Clear drag and drop payload
         fixed (ImGuiPayload* dragDropPayload = &_dragDropPayload)

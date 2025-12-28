@@ -1,4 +1,5 @@
 ﻿using DearImGuiInjection.Renderers;
+using DearImGuiInjection.Textures;
 using DearImGuiInjection.Windows;
 using Hexa.NET.ImGui;
 using SharpDX.Direct3D11;
@@ -65,6 +66,7 @@ internal static class ImGuiDX11
         DX11Renderer.OnPresent -= OnPresent;
         if (!DearImGuiInjectionCore.IsInitialized)
             return;
+        DearImGuiInjectionCore.TextureManager.Dispose();
         foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
@@ -96,8 +98,10 @@ internal static class ImGuiDX11
             _myWindowProc = new User32.WndProcDelegate(WndProcHandler);
             _originalWindowProc = User32.SetWindowLong(_windowHandle, User32.GWL_WNDPROC,
                 Marshal.GetFunctionPointerForDelegate(_myWindowProc));
+            DearImGuiInjectionCore.TextureManager = new DX11TextureManager(_device);
             _isInitialized = true;
         }
+        DearImGuiInjectionCore.TextureManager.Update();
         if (_renderTargetView == null)
         {
             using var backBuffer = swapChain.GetBackBuffer<Texture2D>(0);
@@ -113,20 +117,30 @@ internal static class ImGuiDX11
             {
                 ImGuiImplWin32.Init(_windowHandle);
                 ImGuiImplDX11.Init(_device.NativePointer, _deviceContext.NativePointer);
-                module.OnInit?.Invoke();
+                try
+                {
+                    module.OnInit?.Invoke();
+                }
+                catch (Exception e)
+                {
+                    Log.Error($"Module \"{module.Id}\" OnInit threw an exception: {e}");
+                }
             }
             ImGuiImplWin32.NewFrame();
             ImGuiImplDX11.NewFrame();
             ImGui.NewFrame();
             DearImGuiInjectionCore.MultiContextCompositor.PostNewFrameUpdateOne(module);
-            if (module.OnRender != null)
+            try
             {
-                module.OnRender.Invoke();
+                module.OnRender();
                 ImGui.Render();
+                ImGuiImplDX11.RenderDrawData(ImGui.GetDrawData().Handle);
             }
-            else
+            catch (Exception e)
+            {
                 ImGui.EndFrame();
-            ImGuiImplDX11.RenderDrawData(ImGui.GetDrawData().Handle);
+                Log.Error($"Module \"{module.Id}\" OnRender threw an exception: {e}");
+            }
             if (!module.IsInitialized)
             {
                 ImGuiP.FocusWindow(null);
