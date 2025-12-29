@@ -11,6 +11,7 @@ namespace DearImGuiInjection;
 
 // Multi-Context Compositor v0.11, for Dear ImGui
 // Get latest version at http://www.github.com/ocornut/imgui_club
+// Slightly modified by BULLETBOT
 
 public sealed class ImGuiMultiContextCompositor
 {
@@ -231,10 +232,12 @@ public sealed class ImGuiMultiContextCompositor
             // Bring to front on click
             if ((IsSame(_ctxMouseExclusive, ctx) || IsSame(_ctxMouseFirst, ctx)) && !ctx_is_front)
             {
+                /*
                 bool any_mouse_clicked = false; // conceptually a ~ImGui::IsAnyMouseClicked(), not worth adding to API.
                 for (int n = 0; n < io.MouseClicked.Length; n++)
                     any_mouse_clicked |= io.MouseClicked[n];
-                if (any_mouse_clicked)
+                */
+                if (io.MouseClicked[0]) //any_mouse_clicked
                     BringModuleToFront(module, null);
             }
 

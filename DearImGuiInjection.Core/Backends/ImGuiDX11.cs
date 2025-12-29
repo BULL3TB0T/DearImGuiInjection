@@ -27,9 +27,41 @@ internal static class ImGuiDX11
 
     private static IntPtr WndProcHandler(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam)
     {
+        bool IsKeyUpMsg()
+            => uMsg == WindowMessage.WM_KEYUP || uMsg == WindowMessage.WM_SYSKEYUP;
+        bool IsMouseUpMsg()
+            => uMsg == WindowMessage.WM_LBUTTONUP
+            || uMsg == WindowMessage.WM_RBUTTONUP
+            || uMsg == WindowMessage.WM_MBUTTONUP
+            || uMsg == WindowMessage.WM_XBUTTONUP;
+        bool IsKeyboardMsg()
+            => uMsg == WindowMessage.WM_KEYDOWN
+            || uMsg == WindowMessage.WM_KEYUP
+            || uMsg == WindowMessage.WM_SYSKEYDOWN
+            || uMsg == WindowMessage.WM_SYSKEYUP
+            || uMsg == WindowMessage.WM_CHAR
+            || uMsg == WindowMessage.WM_SYSCHAR
+            || uMsg == WindowMessage.WM_IME_STARTCOMPOSITION
+            || uMsg == WindowMessage.WM_IME_COMPOSITION
+            || uMsg == WindowMessage.WM_IME_ENDCOMPOSITION;
+        bool IsMouseMsg()
+            => uMsg == WindowMessage.WM_MOUSEMOVE
+            || uMsg == WindowMessage.WM_LBUTTONDOWN
+            || uMsg == WindowMessage.WM_LBUTTONUP
+            || uMsg == WindowMessage.WM_LBUTTONDBLCLK
+            || uMsg == WindowMessage.WM_RBUTTONDOWN
+            || uMsg == WindowMessage.WM_RBUTTONUP
+            || uMsg == WindowMessage.WM_RBUTTONDBLCLK
+            || uMsg == WindowMessage.WM_MBUTTONDOWN
+            || uMsg == WindowMessage.WM_MBUTTONUP
+            || uMsg == WindowMessage.WM_MBUTTONDBLCLK
+            || uMsg == WindowMessage.WM_XBUTTONDOWN
+            || uMsg == WindowMessage.WM_XBUTTONUP
+            || uMsg == WindowMessage.WM_XBUTTONDBLCLK
+            || uMsg == WindowMessage.WM_MOUSEWHEEL
+            || uMsg == WindowMessage.WM_MOUSEHWHEEL;
         IntPtr result = IntPtr.Zero;
-        bool wantCaptureMouse = false;
-        bool wantCaptureKeyboard = false;
+        bool allowUpMessages = DearImGuiInjectionCore.AllowUpMessages.GetValue();
         foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             var io = module.IO;
@@ -42,11 +74,14 @@ internal static class ImGuiDX11
                 if (result == IntPtr.Zero && modResult)
                     result = (IntPtr)1;
             }
-            wantCaptureMouse |= io.WantCaptureMouse;
-            wantCaptureKeyboard |= io.WantCaptureKeyboard;
+            if (result == IntPtr.Zero)
+            {
+                if (IsMouseMsg() && io.WantCaptureMouse && !(allowUpMessages && IsMouseUpMsg()))
+                    result = (IntPtr)1;
+                if (IsKeyboardMsg() && io.WantCaptureKeyboard && !(allowUpMessages && IsKeyUpMsg()))
+                    result = (IntPtr)1;
+            }
         }
-        if (wantCaptureMouse || wantCaptureKeyboard)
-            result = (IntPtr)1;
         if (result != IntPtr.Zero)
             return result;
         return User32.CallWindowProc(_originalWindowProc, hWnd, uMsg, wParam, lParam);
@@ -125,6 +160,7 @@ internal static class ImGuiDX11
                 {
                     Log.Error($"Module \"{module.Id}\" OnInit threw an exception: {e}");
                 }
+                module.IsInitialized = true;
             }
             ImGuiImplWin32.NewFrame();
             ImGuiImplDX11.NewFrame();
@@ -140,11 +176,6 @@ internal static class ImGuiDX11
             {
                 ImGui.EndFrame();
                 Log.Error($"Module \"{module.Id}\" OnRender threw an exception: {e}");
-            }
-            if (!module.IsInitialized)
-            {
-                ImGuiP.FocusWindow(null);
-                module.IsInitialized = true;
             }
         }
         DearImGuiInjectionCore.MultiContextCompositor.PostEndFrameUpdateAll();

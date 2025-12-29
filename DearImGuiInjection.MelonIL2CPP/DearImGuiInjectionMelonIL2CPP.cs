@@ -23,6 +23,11 @@ internal class DearImGuiInjectionMelonIL2CPP : MelonMod, ILoader, ILog
     {
         if (!DearImGuiInjectionCore.Init(this, this))
             return;
+        MelonPreferences.CreateCategory(
+            DearImGuiInjectionCore.AllowUpMessagesCategory).CreateEntry(
+            DearImGuiInjectionCore.AllowUpMessagesKey,
+            DearImGuiInjectionCore.AllowUpMessagesDefaultValue,
+            DearImGuiInjectionCore.AllowUpMessagesDescription);
         ClassInjector.RegisterTypeInIl2Cpp<UnityMainThreadDispatcher>();
         var gameObject = new GameObject(DearImGuiInjectionMetadata.Name);
         gameObject.hideFlags = HideFlags.HideAndDontSave;

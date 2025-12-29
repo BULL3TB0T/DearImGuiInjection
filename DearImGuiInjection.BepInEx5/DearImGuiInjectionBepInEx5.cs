@@ -17,6 +17,11 @@ internal class DearImGuiInjectionBepInEx5 : BaseUnityPlugin, ILoader, ILog
     {
         if (!DearImGuiInjectionCore.Init(this, this))
             return;
+        DearImGuiInjectionCore.AllowUpMessages = new ConfigEntryBepInEx<bool>(Config.Bind(
+            DearImGuiInjectionCore.AllowUpMessagesCategory,
+            DearImGuiInjectionCore.AllowUpMessagesKey,
+            DearImGuiInjectionCore.AllowUpMessagesDefaultValue,
+            DearImGuiInjectionCore.AllowUpMessagesDescription));
         gameObject.AddComponent<UnityMainThreadDispatcher>();
     }
 

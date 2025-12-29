@@ -86,7 +86,7 @@ internal class DX11Renderer : IRenderer
             foreach (var module in Process.GetCurrentProcess().Modules.Cast<ProcessModule>())
             {
                 var name = module?.ModuleName;
-                if (string.IsNullOrEmpty(name))
+                if (string.IsNullOrWhiteSpace(name))
                     continue;
                 name = name.ToLowerInvariant();
                 if (name.Contains("d3d11"))

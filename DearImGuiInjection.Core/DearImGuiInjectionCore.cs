@@ -18,6 +18,8 @@ namespace DearImGuiInjection;
 
 public static class DearImGuiInjectionCore
 {
+    internal const string HexaVersion = "unity_hexa_net (v2.2.11-pre)";
+
     public static LoaderKind LoaderKind => Loader.Kind;
     public static RendererKind RendererKind => RendererManager.Kind;
 
@@ -30,11 +32,16 @@ public static class DearImGuiInjectionCore
     public static string AssemblyPath { get; private set; }
     public static string AssetsPath { get; private set; }
 
-    internal static string HexaVersion = "hexa_net (v2.2.11-pre)";
+    internal static IConfigEntry<bool> AllowUpMessages;
+    internal const string AllowUpMessagesCategory = "Input";
+    internal const string AllowUpMessagesKey = "Allow Up Messages";
+    internal const string AllowUpMessagesDescription =
+        "Allows key and mouse release events to pass through, preventing stuck keys when using the UI.";
+    internal const bool AllowUpMessagesDefaultValue = true;
 
     private static ILoader Loader;
 
-    internal unsafe static bool Init(ILoader loader, ILog log)
+    internal static bool Init(ILoader loader, ILog log)
     {
         Log.Init(log);
         if (!RendererManager.Init())
@@ -100,7 +107,7 @@ public static class DearImGuiInjectionCore
 
     public unsafe static ImGuiModule CreateModule(string Id)
     {
-        if (string.IsNullOrEmpty(Id) || MultiContextCompositor.Modules.Any(x => x.Id == Id))
+        if (string.IsNullOrWhiteSpace(Id) || MultiContextCompositor.Modules.Any(x => x.Id == Id))
         {
             Log.Warning($"Module \"{Id}\" already has been registered.");
             return null;
@@ -119,7 +126,7 @@ public static class DearImGuiInjectionCore
     public static void DestroyModule(string Id)
     {
         ImGuiModule module = MultiContextCompositor.Modules.FirstOrDefault(x => x.Id == Id);
-        if (string.IsNullOrEmpty(Id) || module == null)
+        if (string.IsNullOrWhiteSpace(Id) || module == null)
         {
             Log.Warning($"Module \"{Id}\" is not registered.");
             return;

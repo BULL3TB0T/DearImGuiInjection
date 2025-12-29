@@ -20,6 +20,11 @@ internal class DearImGuiInjectionBepInExI2LCPP : BasePlugin, ILoader, ILog
     {
         if (!DearImGuiInjectionCore.Init(this, this))
             return;
+        DearImGuiInjectionCore.AllowUpMessages = new ConfigEntryBepInEx<bool>(Config.Bind(
+            DearImGuiInjectionCore.AllowUpMessagesCategory,
+            DearImGuiInjectionCore.AllowUpMessagesKey,
+            DearImGuiInjectionCore.AllowUpMessagesDefaultValue,
+            DearImGuiInjectionCore.AllowUpMessagesDescription));
         AddComponent<UnityMainThreadDispatcher>();
     }
 
