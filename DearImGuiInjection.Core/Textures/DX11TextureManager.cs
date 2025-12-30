@@ -41,7 +41,6 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
     {
         foreach (var pair in Entries)
             UpdateEntryFrame(nowSeconds, pair.Value);
-
         foreach (var pair in RegisteredEntries)
             UpdateEntryFrame(nowSeconds, pair.Value);
     }
@@ -49,13 +48,11 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
     public override bool TryCreateEntryFromNative(IntPtr ptr, out Entry entry)
     {
         entry = null;
-
         try
         {
             var texture = new Texture2D(ptr);
             var description = texture.Description;
             var shaderResourceView = new ShaderResourceView(_device, texture);
-
             entry = new Entry
             {
                 StaticTex = texture,
@@ -80,7 +77,6 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
         {
             if (!TryCreateTexture(frames[0].Rgba, frames[0].Width, frames[0].Height, out var texture, out var shaderResourceView))
                 return false;
-
             entry = new Entry
             {
                 StaticTex = texture,
@@ -88,21 +84,16 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
                 StaticWidth = frames[0].Width,
                 StaticHeight = frames[0].Height
             };
-
             return true;
         }
-
         var entryFrames = new Entry.Frame[frames.Length];
-
         try
         {
             for (int i = 0; i < frames.Length; i++)
             {
                 var decodedFrame = frames[i];
-
                 if (!TryCreateTexture(decodedFrame.Rgba, decodedFrame.Width, decodedFrame.Height, out var texture, out var shaderResourceView))
                     throw new Exception("Failed to create DX11 texture for a GIF frame.");
-
                 entryFrames[i] = new Entry.Frame
                 {
                     Tex = texture,
@@ -112,12 +103,10 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
                     DelayMs = decodedFrame.DelayMs
                 };
             }
-
             entry = new Entry
             {
                 Frames = entryFrames
             };
-
             return true;
         }
         catch
@@ -127,7 +116,6 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
                 entryFrames[i]?.Tex?.Dispose();
                 entryFrames[i]?.Srv?.Dispose();
             }
-
             return false;
         }
     }
