@@ -1,20 +1,19 @@
 ﻿using DearImGuiInjection;
-using DearImGuiInjection.MelonIL2CPP;
+using DearImGuiInjection.MelonMono;
 using DearImGuiInjection.Windows;
-using Il2CppInterop.Runtime.Injection;
 using MelonLoader;
 using MelonLoader.Utils;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(DearImGuiInjectionMelonIL2CPP), DearImGuiInjectionMetadata.Name, DearImGuiInjectionMetadata.Version, DearImGuiInjectionMetadata.Author, DearImGuiInjectionMetadata.DownloadLink)]
+[assembly: MelonInfo(typeof(DearImGuiInjectionMelonMono), DearImGuiInjectionMetadata.Name, DearImGuiInjectionMetadata.Version, DearImGuiInjectionMetadata.Author, DearImGuiInjectionMetadata.DownloadLink)]
 
-namespace DearImGuiInjection.MelonIL2CPP;
+namespace DearImGuiInjection.MelonMono;
 
-internal class DearImGuiInjectionMelonIL2CPP : MelonMod, ILoader, ILog
+internal class DearImGuiInjectionMelonMono : MelonMod, ILoader, ILog
 {
-    public LoaderKind Kind => LoaderKind.MelonIL2CPP;
+    public LoaderKind Kind => LoaderKind.MelonMono;
 
     public string ConfigPath => MelonEnvironment.UserDataDirectory;
     public string AssemblyPath => Path.GetDirectoryName(MelonAssembly.Location);
@@ -28,7 +27,6 @@ internal class DearImGuiInjectionMelonIL2CPP : MelonMod, ILoader, ILog
             DearImGuiInjectionCore.AllowUpMessagesKey,
             DearImGuiInjectionCore.AllowUpMessagesDefaultValue,
             DearImGuiInjectionCore.AllowUpMessagesDescription);
-        ClassInjector.RegisterTypeInIl2Cpp<UnityMainThreadDispatcher>();
         GameObject gameObject = new GameObject(DearImGuiInjectionMetadata.Name);
         gameObject.hideFlags = HideFlags.HideAndDontSave;
         UnityEngine.Object.DontDestroyOnLoad(gameObject);

@@ -2,9 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net6</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
 
-    <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP</Configurations>
+    <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP;MelonMono</Configurations>
     <Platforms>AnyCPU;x86;x64</Platforms>
 
     <EnableNETAnalyzers>false</EnableNETAnalyzers>

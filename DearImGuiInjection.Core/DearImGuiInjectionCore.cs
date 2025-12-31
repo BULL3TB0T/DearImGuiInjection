@@ -13,6 +13,7 @@ using System.Runtime.InteropServices;
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInEx5")]
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInExIL2CPP")]
 [assembly: InternalsVisibleTo("DearImGuiInjection.MelonIL2CPP")]
+[assembly: InternalsVisibleTo("DearImGuiInjection.MelonMono")]
 
 namespace DearImGuiInjection;
 

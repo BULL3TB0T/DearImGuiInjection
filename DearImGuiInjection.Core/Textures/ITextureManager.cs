@@ -5,17 +5,28 @@ using System.Text;
 
 namespace DearImGuiInjection.Textures;
 
-public interface ITextureManager : IDisposable
+public interface ITextureManager
 {
-    internal void Update();
+    public struct TextureData
+    {
+        public struct TextureFrameData
+        {
+            public ImTextureRef TextureRef;
+            public int Width;
+            public int Height;
+            public int DelayMs;
+        }
+        public TextureFrameData[] Frames;
+        public int FrameIndex;
+        public float NextFrameInSeconds;
+    }
 
-    public bool TryGetTextureRef(string relativePath, out ImTextureRef textureRef);
-    public bool TryGetTextureRefForFrame(string relativePath, int frame, out ImTextureRef textureRef);
-    public bool TryGetTextureSize(string relativePath, out int width, out int height);
+    internal void Update();
+    internal void Dispose();
+
+    public bool TryGetTextureData(string relativePath, out TextureData textureData);
 
     internal bool RegisterTexture(string ownerId, string key, IntPtr ptr);
     public bool UnregisterTexture(string ownerId, string key);
-    public bool TryGetRegisteredTextureRef(string ownerId, string key, out ImTextureRef textureRef);
-    public bool TryGetRegisteredTextureRefForFrame(string ownerId, string key, int frame, out ImTextureRef textureRef);
-    public bool TryGetRegisteredTextureSize(string ownerId, string key, out int width, out int height);
+    public bool TryGetTextureData(string ownerId, string key, out TextureData textureData);
 }

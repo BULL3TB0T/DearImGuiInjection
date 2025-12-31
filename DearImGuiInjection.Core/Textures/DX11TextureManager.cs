@@ -10,11 +10,11 @@ using Device = SharpDX.Direct3D11.Device;
 
 namespace DearImGuiInjection.Textures;
 
-internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
+internal class DX11TextureManager : TextureManager<DX11TextureManager.EntryData>
 {
-    public class Entry
+    public struct EntryData
     {
-        public class Frame
+        public struct FrameData
         {
             public Texture2D Tex;
             public ShaderResourceView Srv;
@@ -22,71 +22,56 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
             public int Height;
             public int DelayMs;
         }
-
-        public Texture2D StaticTex;
-        public ShaderResourceView StaticSrv;
-        public int StaticWidth;
-        public int StaticHeight;
-
-        public Frame[] Frames;
+        public FrameData[] FrameDatas;
         public int FrameIndex;
-        public double NextSwitchTimeSeconds;
+        public float NextFrameInSeconds;
+        internal ITextureManager.TextureData CachedTextureData;
+        internal ITextureManager.TextureData.TextureFrameData[] CachedFrameDatas;
     }
 
-    private readonly Device _device;
+    private Device _device;
 
     public DX11TextureManager(Device device) => _device = device;
 
-    public override void UpdateFrames(double nowSeconds)
+    public override void UpdateEntryData(ref EntryData entryData)
     {
-        foreach (var pair in Entries)
-            UpdateEntryFrame(nowSeconds, pair.Value);
-        foreach (var pair in RegisteredEntries)
-            UpdateEntryFrame(nowSeconds, pair.Value);
+        float nowSeconds = NowSeconds;
+        int frameCount = entryData.FrameDatas.Length;
+        if (entryData.NextFrameInSeconds <= 0)
+        {
+            int firstDelayMs = entryData.FrameDatas[0].DelayMs;
+            if (frameCount > 1 && firstDelayMs <= 0)
+                firstDelayMs = 100;
+            entryData.FrameIndex = 0;
+            entryData.NextFrameInSeconds = nowSeconds + (firstDelayMs / 1000.0f);
+            return;
+        }
+        if (nowSeconds < entryData.NextFrameInSeconds)
+            return;
+        int nextIndex = entryData.FrameIndex + 1;
+        if (nextIndex >= frameCount)
+            nextIndex = 0;
+        entryData.FrameIndex = nextIndex;
+        int delayMs = entryData.FrameDatas[nextIndex].DelayMs;
+        if (frameCount > 1 && delayMs <= 0)
+            delayMs = 100;
+        entryData.NextFrameInSeconds = nowSeconds + (delayMs / 1000.0f);
     }
 
-    public override bool TryCreateEntryFromNative(IntPtr ptr, out Entry entry)
+    public override void DisposeEntryData(EntryData entryData)
     {
-        entry = null;
-        try
+        for (int i = 0; i < entryData.FrameDatas.Length; i++)
         {
-            var texture = new Texture2D(ptr);
-            var description = texture.Description;
-            var shaderResourceView = new ShaderResourceView(_device, texture);
-            entry = new Entry
-            {
-                StaticTex = texture,
-                StaticSrv = shaderResourceView,
-                StaticWidth = description.Width,
-                StaticHeight = description.Height
-            };
-
-            return true;
-        }
-        catch
-        {
-            return false;
+            var frame = entryData.FrameDatas[i];
+            frame.Tex?.Dispose();
+            frame.Srv?.Dispose();
         }
     }
 
-    public override bool TryLoadEntry(string fullPath, DecodedFrame[] frames, out Entry entry)
+    public override bool TryCreateEntryData(string fullPath, DecodedFrame[] frames, out EntryData entry)
     {
-        entry = null;
-
-        if (frames.Length == 1)
-        {
-            if (!TryCreateTexture(frames[0].Rgba, frames[0].Width, frames[0].Height, out var texture, out var shaderResourceView))
-                return false;
-            entry = new Entry
-            {
-                StaticTex = texture,
-                StaticSrv = shaderResourceView,
-                StaticWidth = frames[0].Width,
-                StaticHeight = frames[0].Height
-            };
-            return true;
-        }
-        var entryFrames = new Entry.Frame[frames.Length];
+        entry = default;
+        var entryFrames = new EntryData.FrameData[frames.Length];
         try
         {
             for (int i = 0; i < frames.Length; i++)
@@ -94,7 +79,7 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
                 var decodedFrame = frames[i];
                 if (!TryCreateTexture(decodedFrame.Rgba, decodedFrame.Width, decodedFrame.Height, out var texture, out var shaderResourceView))
                     throw new Exception("Failed to create DX11 texture for a GIF frame.");
-                entryFrames[i] = new Entry.Frame
+                entryFrames[i] = new EntryData.FrameData
                 {
                     Tex = texture,
                     Srv = shaderResourceView,
@@ -103,9 +88,9 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
                     DelayMs = decodedFrame.DelayMs
                 };
             }
-            entry = new Entry
+            entry = new EntryData
             {
-                Frames = entryFrames
+                FrameDatas = entryFrames
             };
             return true;
         }
@@ -113,63 +98,81 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
         {
             for (int i = 0; i < entryFrames.Length; i++)
             {
-                entryFrames[i]?.Tex?.Dispose();
-                entryFrames[i]?.Srv?.Dispose();
+                entryFrames[i].Tex?.Dispose();
+                entryFrames[i].Srv?.Dispose();
             }
             return false;
         }
     }
 
-    public override void DisposeEntry(Entry entry)
+    public override bool TryCreateEntryData(IntPtr ptr, out EntryData entry)
     {
-        entry.StaticSrv?.Dispose();
-        entry.StaticSrv = null;
-        entry.StaticTex?.Dispose();
-        entry.StaticTex = null;
-        if (entry.Frames != null)
+        entry = default;
+        Texture2D texture = null;
+        ShaderResourceView shaderResourceView = null;
+        try
         {
-            for (int i = 0; i < entry.Frames.Length; i++)
+            texture = new Texture2D(ptr);
+            shaderResourceView = new ShaderResourceView(_device, texture);
+            var description = texture.Description;
+            entry = new EntryData
             {
-                var frame = entry.Frames[i];
-                frame?.Srv?.Dispose();
-                frame?.Tex?.Dispose();
+                FrameDatas = new[]
+                {
+                    new EntryData.FrameData()
+                    {
+                        Tex = texture,
+                        Srv = shaderResourceView,
+                        Width = description.Width,
+                        Height = description.Height
+                    }
+                }
+            };
+            return true;
+        }
+        catch
+        {
+            texture?.Dispose();
+            shaderResourceView?.Dispose();
+            return false;
+        }
+    }
+
+    public override ITextureManager.TextureData GetTextureData(EntryData entryData)
+    {
+        if (entryData.CachedFrameDatas == null)
+        {
+            int frameCount = entryData.FrameDatas.Length;
+            entryData.CachedFrameDatas = new ITextureManager.TextureData.TextureFrameData[frameCount];
+            for (int i = 0; i < frameCount; i++)
+            {
+                EntryData.FrameData frameData = entryData.FrameDatas[i];
+                entryData.CachedFrameDatas[i] = new ITextureManager.TextureData.TextureFrameData
+                {
+                    TextureRef = new ImTextureRef
+                    {
+                        TexID = frameData.Srv.NativePointer
+                    },
+                    Width = frameData.Width,
+                    Height = frameData.Height,
+                    DelayMs = frameData.DelayMs
+                };
             }
-            entry.Frames = null;
+            entryData.CachedTextureData = new ITextureManager.TextureData
+            {
+                Frames = entryData.CachedFrameDatas
+            };
         }
+        entryData.CachedTextureData.FrameIndex = entryData.FrameIndex;
+        entryData.CachedTextureData.NextFrameInSeconds = entryData.NextFrameInSeconds;
+        return entryData.CachedTextureData;
     }
 
-    public override ImTextureID GetTextureId(Entry entry, int frame = -1)
+    private bool TryCreateTexture(byte[] rgba, int width, int height, out Texture2D texture, 
+        out ShaderResourceView shaderResourceView)
     {
-        if (entry.Frames != null)
-        {
-            int index = frame >= 0 ? frame : entry.FrameIndex;
-            if ((uint)index >= (uint)entry.Frames.Length)
-                index = 0;
-            return entry.Frames[index]?.Srv?.NativePointer ?? IntPtr.Zero;
-        }
-        return entry.StaticSrv?.NativePointer ?? IntPtr.Zero;
-    }
-
-    public override void GetTextureSize(Entry entry, out int width, out int height)
-    {
-        if (entry.Frames != null)
-        {
-            int index = entry.FrameIndex;
-            if ((uint)index >= (uint)entry.Frames.Length)
-                index = 0;
-            var frame = entry.Frames[index];
-            width = frame?.Width ?? 0;
-            height = frame?.Height ?? 0;
-            return;
-        }
-        width = entry.StaticWidth;
-        height = entry.StaticHeight;
-    }
-
-    private bool TryCreateTexture(byte[] rgba, int width, int height, out Texture2D tex, out ShaderResourceView srv)
-    {
-        tex = null;
-        srv = null;
+        texture = null;
+        shaderResourceView = null;
         if (rgba == null || rgba.Length == 0 || width <= 0 || height <= 0)
             return false;
         var description = new Texture2DDescription
@@ -191,16 +194,16 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
             dataPtr = Marshal.AllocHGlobal(rgba.Length);
             Marshal.Copy(rgba, 0, dataPtr, rgba.Length);
             var rect = new DataRectangle(dataPtr, width * 4);
-            tex = new Texture2D(_device, description, rect);
-            srv = new ShaderResourceView(_device, tex);
+            texture = new Texture2D(_device, description, rect);
+            shaderResourceView = new ShaderResourceView(_device, texture);
             return true;
         }
         catch
         {
-            srv?.Dispose();
-            tex?.Dispose();
-            tex = null;
-            srv = null;
+            texture?.Dispose();
+            texture = null;
+            shaderResourceView?.Dispose();
+            shaderResourceView = null;
             return false;
         }
         finally
@@ -208,30 +211,5 @@ internal class DX11TextureManager : TextureManager<DX11TextureManager.Entry>
             if (dataPtr != IntPtr.Zero)
                 Marshal.FreeHGlobal(dataPtr);
         }
-    }
-
-    private void UpdateEntryFrame(double nowSeconds, Entry entry)
-    {
-        if (entry.Frames == null)
-            return;
-        if (entry.NextSwitchTimeSeconds <= 0)
-        {
-            int firstDelayMs = entry.Frames[0].DelayMs;
-            if (firstDelayMs <= 0)
-                firstDelayMs = 100;
-            entry.FrameIndex = 0;
-            entry.NextSwitchTimeSeconds = nowSeconds + (firstDelayMs / 1000.0);
-            return;
-        }
-        if (nowSeconds < entry.NextSwitchTimeSeconds)
-            return;
-        int nextIndex = entry.FrameIndex + 1;
-        if (nextIndex >= entry.Frames.Length)
-            nextIndex = 0;
-        entry.FrameIndex = nextIndex;
-        int delayMs = entry.Frames[nextIndex].DelayMs;
-        if (delayMs <= 0)
-            delayMs = 100;
-        entry.NextSwitchTimeSeconds = nowSeconds + (delayMs / 1000.0);
     }
 }

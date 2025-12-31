@@ -4,7 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace DearImGuiInjection.MelonIL2CPP;
+namespace DearImGuiInjection.MelonMono;
 
 public class UnityMainThreadDispatcher : MonoBehaviour
 {

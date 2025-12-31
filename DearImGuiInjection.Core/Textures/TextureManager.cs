@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace DearImGuiInjection.Textures;
 
-internal abstract class TextureManager<TEntry> : ITextureManager where TEntry : class
+internal abstract class TextureManager<TEntryData> : ITextureManager where TEntryData : struct
 {
     private enum ChangeType
     {
@@ -27,40 +27,49 @@ internal abstract class TextureManager<TEntry> : ITextureManager where TEntry : 
 
     private string RootDirectory;
 
-    private readonly FileSystemWatcher _watcher;
-    private readonly ConcurrentQueue<(ChangeType Type, string FullPath)> _queue = new();
-    internal readonly Dictionary<string, TEntry> Entries = new();
-    private readonly Dictionary<string, HashSet<string>> _registeredOwnerKeys = new();
-    internal readonly Dictionary<string, TEntry> RegisteredEntries = new();
+    internal float NowSeconds;
 
-    public TextureManager()
-    {
-        RootDirectory = Path.Combine(DearImGuiInjectionCore.AssetsPath, "Textures");
-        RecreateRootDirectory();
-        foreach (string fullPath in Directory.EnumerateFiles(RootDirectory, "*.*", SearchOption.AllDirectories))
-            _queue.Enqueue((ChangeType.AddOrUpdate, fullPath));
-        _watcher = new FileSystemWatcher(RootDirectory)
-        {
-            IncludeSubdirectories = true,
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.Size,
-            Filter = "*.*",
-            EnableRaisingEvents = true
-        };
-        _watcher.Created += (_, args) => Enqueue(ChangeType.AddOrUpdate, args.FullPath);
-        _watcher.Changed += (_, args) => Enqueue(ChangeType.AddOrUpdate, args.FullPath);
-        _watcher.Deleted += (_, args) => Enqueue(ChangeType.Remove, args.FullPath);
-        _watcher.Renamed += (_, args) =>
-        {
-            Enqueue(ChangeType.Remove, args.OldFullPath);
-            Enqueue(ChangeType.AddOrUpdate, args.FullPath);
-        };
-    }
+    private float _nextScanInSeconds;
+    private const float ScanIntervalSeconds = 0.5f;
+
+    private readonly Queue<(ChangeType Type, string FullPath)> _queue = new();
+    private readonly Dictionary<string, DateTime> _knownWriteTimesUtc = new(StringComparer.OrdinalIgnoreCase);
+    internal readonly Dictionary<string, TEntryData> Entries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HashSet<string>> _registeredOwnerKeys = new();
+    internal readonly Dictionary<string, TEntryData> RegisteredEntries = new();
+
+    public TextureManager() => RootDirectory = Path.Combine(DearImGuiInjectionCore.AssetsPath, "Textures");
 
     public void Update()
     {
         RecreateRootDirectory();
-        while (_queue.TryDequeue(out var item))
+        NowSeconds = Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency;
+        if (NowSeconds >= _nextScanInSeconds)
         {
+            _nextScanInSeconds = NowSeconds + ScanIntervalSeconds;
+            ScanForChanges();
+        }
+        string[] keys = Entries.Keys.ToArray();
+        for (int i = 0; i < keys.Length; i++)
+        {
+            string key = keys[i];
+            if (!Entries.TryGetValue(key, out TEntryData entryData))
+                continue;
+            UpdateEntryData(ref entryData);
+            Entries[key] = entryData;
+        }
+        keys = RegisteredEntries.Keys.ToArray();
+        for (int i = 0; i < keys.Length; i++)
+        {
+            string key = keys[i];
+            if (!RegisteredEntries.TryGetValue(key, out TEntryData entryData))
+                continue;
+            UpdateEntryData(ref entryData);
+            RegisteredEntries[key] = entryData;
+        }
+        while (_queue.Count > 0)
+        {
+            var item = _queue.Dequeue();
             string fullPath = item.FullPath;
             string key = MakeRelativeKey(fullPath);
             if (item.Type == ChangeType.Remove)
@@ -72,49 +81,19 @@ internal abstract class TextureManager<TEntry> : ITextureManager where TEntry : 
                 continue;
             if (!TryDecodeFramesRgba32Wic(fullPath, out DecodedFrame[] frames))
                 continue;
-            if (!TryLoadEntry(fullPath, frames, out TEntry entry))
+            if (!TryCreateEntryData(fullPath, frames, out TEntryData entryData))
                 continue;
-            ReplaceEntry(key, entry);
+            ReplaceEntry(key, entryData);
         }
-        UpdateFrames(Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency);
     }
 
-    public bool TryGetTextureRef(string relativePath, out ImTextureRef textureRef)
+    public bool TryGetTextureData(string relativePath, out ITextureManager.TextureData textureData)
     {
-        textureRef = default;
-        if (Entries.TryGetValue(NormalizeRelativeKey(relativePath), out TEntry entry))
+        textureData = default;
+        if (Entries.TryGetValue(NormalizeRelativeKey(relativePath), out TEntryData entryData))
         {
-            ImTextureID textureId = GetTextureId(entry);
-            if (textureId == IntPtr.Zero)
-                return false;
-            textureRef.TexID = textureId;
+            textureData = GetTextureData(entryData);
             return true;
-        }
-        return false;
-    }
-
-    public bool TryGetTextureRefForFrame(string relativePath, int frame, out ImTextureRef textureRef)
-    {
-        textureRef = default;
-        if (Entries.TryGetValue(NormalizeRelativeKey(relativePath), out TEntry entry))
-        {
-            ImTextureID textureId = GetTextureId(entry, frame);
-            if (textureId == IntPtr.Zero)
-                return false;
-            textureRef.TexID = textureId;
-            return true;
-        }
-        return false;
-    }
-
-    public bool TryGetTextureSize(string relativePath, out int width, out int height)
-    {
-        width = 0;
-        height = 0;
-        if (Entries.TryGetValue(NormalizeRelativeKey(relativePath), out TEntry entry))
-        {
-            GetTextureSize(entry, out width, out height);
-            return width > 0 && height > 0;
         }
         return false;
     }
@@ -122,17 +101,17 @@ internal abstract class TextureManager<TEntry> : ITextureManager where TEntry : 
     public bool RegisterTexture(string ownerId, string key, IntPtr ptr)
     {
         if (!DearImGuiInjectionCore.MultiContextCompositor.Modules.Any(module => module.Id == ownerId)
-            || !TryCreateEntryFromNative(ptr, out TEntry entry))
+            || !TryCreateEntryData(ptr, out TEntryData entryData))
             return false;
-        if (RegisteredEntries.TryGetValue(key, out TEntry oldEntry))
+        if (RegisteredEntries.TryGetValue(key, out TEntryData oldEntryData))
         {
             RegisteredEntries.Remove(key);
-            DisposeEntry(oldEntry);
+            DisposeEntryData(oldEntryData);
         }
-        RegisteredEntries[key] = entry;
+        RegisteredEntries[key] = entryData;
         if (!_registeredOwnerKeys.TryGetValue(ownerId, out var set))
         {
-            set = new HashSet<string>();
+            set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _registeredOwnerKeys[ownerId] = set;
         }
         set.Add(key);
@@ -146,83 +125,48 @@ internal abstract class TextureManager<TEntry> : ITextureManager where TEntry : 
             return false;
         if (!_registeredOwnerKeys.TryGetValue(ownerId, out var set) || !set.Remove(key))
             return false;
-        if (RegisteredEntries.TryGetValue(key, out TEntry entry))
+        if (RegisteredEntries.TryGetValue(key, out TEntryData entryData))
         {
             RegisteredEntries.Remove(key);
-            DisposeEntry(entry);
+            DisposeEntryData(entryData);
         }
         if (set.Count == 0)
             _registeredOwnerKeys.Remove(ownerId);
         return true;
     }
 
-    public bool TryGetRegisteredTextureRef(string ownerId, string key, out ImTextureRef textureRef)
+    public bool TryGetTextureData(string ownerId, string key, out ITextureManager.TextureData textureData)
     {
-        textureRef = default;
+        textureData = default;
         if (!_registeredOwnerKeys.TryGetValue(ownerId, out var set) || !set.Contains(key))
             return false;
-        if (RegisteredEntries.TryGetValue(key, out TEntry entry))
+        if (RegisteredEntries.TryGetValue(key, out TEntryData entryData))
         {
-            ImTextureID textureId = GetTextureId(entry);
-            if (textureId == IntPtr.Zero)
-                return false;
-            textureRef.TexID = textureId;
+            textureData = GetTextureData(entryData);
             return true;
-        }
-        return false;
-    }
-
-    public bool TryGetRegisteredTextureRefForFrame(string ownerId, string key, int frame, out ImTextureRef textureRef)
-    {
-        textureRef = default;
-        if (!_registeredOwnerKeys.TryGetValue(ownerId, out var set) || !set.Contains(key))
-            return false;
-        if (RegisteredEntries.TryGetValue(key, out TEntry entry))
-        {
-            ImTextureID textureId = GetTextureId(entry, frame);
-            if (textureId == IntPtr.Zero)
-                return false;
-            textureRef.TexID = textureId;
-            return true;
-        }
-        return false;
-    }
-
-    public bool TryGetRegisteredTextureSize(string ownerId, string key, out int width, out int height)
-    {
-        width = 0;
-        height = 0;
-        if (!_registeredOwnerKeys.TryGetValue(ownerId, out var set) || !set.Contains(key))
-            return false;
-        if (RegisteredEntries.TryGetValue(key, out TEntry entry))
-        {
-            GetTextureSize(entry, out width, out height);
-            return width > 0 && height > 0;
         }
         return false;
     }
 
     public void Dispose()
     {
-        _watcher.EnableRaisingEvents = false;
-        _watcher.Dispose();
+        _knownWriteTimesUtc.Clear();
         foreach (var pair in Entries)
-            DisposeEntry(pair.Value);
+            DisposeEntryData(pair.Value);
         Entries.Clear();
         _registeredOwnerKeys.Clear();
         foreach (var pair in RegisteredEntries)
-            DisposeEntry(pair.Value);
+            DisposeEntryData(pair.Value);
         RegisteredEntries.Clear();
     }
 
-    public abstract void UpdateFrames(double nowSeconds);
+    public abstract void UpdateEntryData(ref TEntryData entryData);
+    public abstract void DisposeEntryData(TEntryData entryData);
 
-    public abstract bool TryCreateEntryFromNative(IntPtr ptr, out TEntry entry);
-    public abstract bool TryLoadEntry(string fullPath, DecodedFrame[] frames, out TEntry entry);
-    public abstract void DisposeEntry(TEntry entry);
+    public abstract bool TryCreateEntryData(string fullPath, DecodedFrame[] frames, out TEntryData entryData);
+    public abstract bool TryCreateEntryData(IntPtr ptr, out TEntryData entryData);
 
-    public abstract ImTextureID GetTextureId(TEntry entry, int frame = -1);
-    public abstract void GetTextureSize(TEntry entry, out int width, out int height);
+    public abstract ITextureManager.TextureData GetTextureData(TEntryData entryData);
 
     private static bool TryDecodeFramesRgba32Wic(string fullPath, out DecodedFrame[] frames)
     {
@@ -277,7 +221,9 @@ internal abstract class TextureManager<TEntry> : ITextureManager where TEntry : 
                 int left = ReadMetaInt(frame, "/imgdesc/Left", 0);
                 int top = ReadMetaInt(frame, "/imgdesc/Top", 0);
                 int disposal = ReadMetaInt(frame, "/grctlext/Disposal", 0);
-                int delayMs = TryReadGifDelayMs(frame);
+                int delayMs = 0;
+                if (frameCount > 1)
+                    delayMs = TryReadGifDelayMs(frame);
                 if (i > 0 && prevDisposal == 2)
                     ClearRect(canvas, canvasWidth, canvasHeight, prevLeft, prevTop, prevWidth, prevHeight);
                 using var converter = new FormatConverter(factory);
@@ -425,28 +371,76 @@ internal abstract class TextureManager<TEntry> : ITextureManager where TEntry : 
         return relativePath;
     }
 
-    private void Enqueue(ChangeType type, string fullPath)
-    {
-        if (string.IsNullOrWhiteSpace(fullPath))
-            return;
-        fullPath = Path.GetFullPath(fullPath);
-        if (!fullPath.StartsWith(RootDirectory, StringComparison.OrdinalIgnoreCase))
-            return;
-        _queue.Enqueue((type, fullPath));
-    }
-
-    private void ReplaceEntry(string key, TEntry entry)
+    private void ReplaceEntry(string key, TEntryData entryData)
     {
         RemoveEntry(key);
-        Entries[key] = entry;
+        Entries[key] = entryData;
     }
 
     private void RemoveEntry(string key)
     {
-        if (Entries.TryGetValue(key, out TEntry entry))
+        if (Entries.TryGetValue(key, out TEntryData entryData))
         {
             Entries.Remove(key);
-            DisposeEntry(entry);
+            DisposeEntryData(entryData);
+        }
+    }
+
+    private void ScanForChanges()
+    {
+        if (!Directory.Exists(RootDirectory))
+        {
+            _knownWriteTimesUtc.Clear();
+            foreach (var pair in Entries.ToArray())
+                _queue.Enqueue((ChangeType.Remove, Path.Combine(RootDirectory, pair.Key)));
+            Entries.Clear();
+            return;
+        }
+        foreach (string fullPath in Directory.EnumerateFiles(RootDirectory, "*.*", SearchOption.AllDirectories))
+        {
+            if (!TryGetWriteTimeUtc(fullPath, out DateTime writeTimeUtc))
+                continue;
+            if (_knownWriteTimesUtc.TryGetValue(fullPath, out DateTime knownUtc))
+            {
+                if (writeTimeUtc <= knownUtc)
+                    continue;
+                _knownWriteTimesUtc[fullPath] = writeTimeUtc;
+                _queue.Enqueue((ChangeType.AddOrUpdate, fullPath));
+                continue;
+            }
+            _knownWriteTimesUtc[fullPath] = writeTimeUtc;
+            _queue.Enqueue((ChangeType.AddOrUpdate, fullPath));
+        }
+        if (_knownWriteTimesUtc.Count == 0)
+            return;
+        string[] knownPaths = _knownWriteTimesUtc.Keys.ToArray();
+        for (int i = 0; i < knownPaths.Length; i++)
+        {
+            string fullPath = knownPaths[i];
+            if (File.Exists(fullPath))
+                continue;
+            _knownWriteTimesUtc.Remove(fullPath);
+            _queue.Enqueue((ChangeType.Remove, fullPath));
+        }
+    }
+
+    private void TryRememberWriteTime(string fullPath)
+    {
+        if (TryGetWriteTimeUtc(fullPath, out DateTime writeTimeUtc))
+            _knownWriteTimesUtc[fullPath] = writeTimeUtc;
+    }
+
+    private static bool TryGetWriteTimeUtc(string fullPath, out DateTime writeTimeUtc)
+    {
+        writeTimeUtc = default;
+        try
+        {
+            writeTimeUtc = File.GetLastWriteTimeUtc(fullPath);
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -463,7 +457,7 @@ internal abstract class TextureManager<TEntry> : ITextureManager where TEntry : 
         var baseUri = new Uri(baseDir);
         var fullUri = new Uri(fullPath);
         string rel = Uri.UnescapeDataString(baseUri.MakeRelativeUri(fullUri).ToString());
-        return rel.Replace('/', Path.DirectorySeparatorChar);
+        return rel.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
     }
 
     private static string EnsureTrailingSeparator(string path)

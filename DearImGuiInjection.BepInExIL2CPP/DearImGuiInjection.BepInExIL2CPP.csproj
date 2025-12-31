@@ -1,25 +1,24 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<PropertyGroup>
-		<TargetFramework>net6</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
+  <PropertyGroup>
+    <TargetFramework>net6</TargetFramework>
 
-    <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP</Configurations>
+    <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP;MelonMono</Configurations>
     <Platforms>AnyCPU;x86;x64</Platforms>
 
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
-		<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
     <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
-		
-		<RestoreAdditionalProjectSources>
-			https://api.nuget.org/v3/index.json;
-			https://nuget.bepinex.dev/v3/index.json
-		</RestoreAdditionalProjectSources>
-	</PropertyGroup>
 
-	<ItemGroup>
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json
+    </RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
+  <ItemGroup>
     <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be*" PrivateAssets="all" />
-    
+
     <Reference Include="Il2Cppmscorlib">
       <HintPath>$(IL2CPPDir)Il2Cppmscorlib.dll</HintPath>
       <Private>false</Private>
@@ -30,7 +29,7 @@
     </Reference>
   </ItemGroup>
 
-	<ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\DearImGuiInjection.Core\DearImGuiInjection.Core.csproj" />
   </ItemGroup>
 

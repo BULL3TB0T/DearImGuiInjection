@@ -8,11 +8,12 @@ public enum RendererKind
     DX11
 }
 
-internal interface IRenderer : IDisposable
+internal interface IRenderer
 {
     public RendererKind Kind { get; }
 
     public bool IsSupported();
 
     public void Init();
+    public void Dispose();
 }

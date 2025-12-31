@@ -6,7 +6,8 @@ public enum LoaderKind
 {
     BepInEx5,
     BepInExIL2CPP,
-    MelonIL2CPP
+    MelonIL2CPP,
+    MelonMono
 }
 
 internal interface ILoader
