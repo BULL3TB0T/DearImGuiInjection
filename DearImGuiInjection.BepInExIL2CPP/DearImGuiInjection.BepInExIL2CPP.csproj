@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
 
     <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP;MelonMono</Configurations>
     <Platforms>AnyCPU;x86;x64</Platforms>

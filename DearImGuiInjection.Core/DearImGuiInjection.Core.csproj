@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <TargetFramework Condition="'$(CoreUsesMonoTargetFramework)'=='false'">netstandard2.0</TargetFramework>
+    <TargetFramework Condition="'$(CoreUsesMonoTargetFramework)'=='true'">$(MonoTargetFramework)</TargetFramework>
     <LangVersion>preview</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
@@ -22,15 +23,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 
+    <PackageReference Include="Hexa.NET.ImGui" Version="2.2.10-*" />
+    -->
     <PackageReference Include="Reloaded.Hooks" Version="4.3.3" />
     <PackageReference Include="SharpDX" Version="4.2.0" />
     <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
     <PackageReference Include="SharpDX.Direct2D1" Version="4.2.0" />
     <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
     <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
-    <!-- 
-    <PackageReference Include="Hexa.NET.ImGui" Version="2.2.10-*" />
-    -->
     <PackageReference Include="System.Memory" Version="4.6.3" />
 
     <Reference Include="Hexa.NET.ImGui">

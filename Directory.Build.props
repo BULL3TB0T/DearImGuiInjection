@@ -1,10 +1,15 @@
 <Project>
   <ItemGroup>
-    <PackExclude Include="System." />
     <PackExclude Include="FASM" />
-    <PackExclude Include="Iced." />
   </ItemGroup>
   <PropertyGroup>
+    <!-- 
+    https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html#initializing-a-plugin-project-from-template
+    https://melonwiki.xyz/#/modders/quickstart?id=basic-mod-setup
+    -->
+    <MonoTargetFramework>net462</MonoTargetFramework>
+    <CoreUsesMonoTargetFramework>false</CoreUsesMonoTargetFramework>
+
     <StartSteamGameAfterBuild>false</StartSteamGameAfterBuild>
     <SteamAppId>0</SteamAppId>
 
@@ -13,7 +18,7 @@
 
     <AssetsFolderName>Assets</AssetsFolderName>
     <AssetsDir>$(SolutionDir)$(AssetsFolderName)\</AssetsDir>
-    
+
     <LibsFolderName>Libraries</LibsFolderName>
     <LibsDir>$(SolutionDir)$(LibsFolderName)\</LibsDir>
 
@@ -28,5 +33,8 @@
 
     <IL2CPPFolderName>IL2CPP</IL2CPPFolderName>
     <IL2CPPDir>$(LibsDir)$(IL2CPPFolderName)\</IL2CPPDir>
+
+    <NoWarn>$(NoWarn);NU1702</NoWarn>
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
   </PropertyGroup>
 </Project>

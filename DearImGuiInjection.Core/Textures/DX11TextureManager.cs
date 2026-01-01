@@ -10,7 +10,7 @@ using Device = SharpDX.Direct3D11.Device;
 
 namespace DearImGuiInjection.Textures;
 
-internal class DX11TextureManager : TextureManager<DX11TextureManager.EntryData>
+internal sealed class DX11TextureManager : TextureManager<DX11TextureManager.EntryData>
 {
     public struct EntryData
     {

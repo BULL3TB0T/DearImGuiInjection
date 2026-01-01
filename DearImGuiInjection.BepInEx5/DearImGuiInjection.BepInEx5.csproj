@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>$(MonoTargetFramework)</TargetFramework>
     <LangVersion>preview</LangVersion>
 
     <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP;MelonMono</Configurations>

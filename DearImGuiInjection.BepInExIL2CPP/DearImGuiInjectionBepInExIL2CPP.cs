@@ -4,13 +4,16 @@ using BepInEx.Unity.IL2CPP;
 using DearImGuiInjection;
 using DearImGuiInjection.Renderers;
 using DearImGuiInjection.Windows;
+using System.IO;
 
 namespace DearImGuiInjection.BepInExIL2CPP;
 
 [BepInPlugin(DearImGuiInjectionMetadata.GUID, DearImGuiInjectionMetadata.Name, DearImGuiInjectionMetadata.Version)]
-internal class DearImGuiInjectionBepInExI2LCPP : BasePlugin, ILoader, ILog
+internal class DearImGuiInjectionBepInExI2LCPP : BasePlugin, ILoader
 {
     public LoaderKind Kind => LoaderKind.BepInExIL2CPP;
+
+    public string GUID => DearImGuiInjectionMetadata.GUID;
 
     public string ConfigPath => Paths.ConfigPath;
     public string AssemblyPath => 
@@ -18,13 +21,8 @@ internal class DearImGuiInjectionBepInExI2LCPP : BasePlugin, ILoader, ILog
 
     public override void Load()
     {
-        if (!DearImGuiInjectionCore.Init(this, this))
+        if (!DearImGuiInjectionCore.Init(this))
             return;
-        DearImGuiInjectionCore.AllowUpMessages = new ConfigEntryBepInEx<bool>(Config.Bind(
-            DearImGuiInjectionCore.AllowUpMessagesCategory,
-            DearImGuiInjectionCore.AllowUpMessagesKey,
-            DearImGuiInjectionCore.AllowUpMessagesDefaultValue,
-            DearImGuiInjectionCore.AllowUpMessagesDescription));
         AddComponent<UnityMainThreadDispatcher>();
     }
 
@@ -33,6 +31,10 @@ internal class DearImGuiInjectionBepInExI2LCPP : BasePlugin, ILoader, ILog
         DearImGuiInjectionCore.Dispose();
         return true;
     }
+
+    public void CreateConfig<T>(ref IConfigEntry<T> configEntry, string category, string key, T defaultValue, string description) =>
+        configEntry = new ConfigEntryBepInEx<T>(Config.Bind(category, key, defaultValue, description));
+    public void SaveConfig() { }
 
     public void Debug(object data) => Log.LogDebug(data);
     public void Error(object data) => Log.LogError(data);

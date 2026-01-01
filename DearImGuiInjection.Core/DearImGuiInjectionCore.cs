@@ -1,4 +1,5 @@
 ﻿using DearImGuiInjection.Backends;
+using DearImGuiInjection.Handlers;
 using DearImGuiInjection.Renderers;
 using DearImGuiInjection.Textures;
 using Hexa.NET.ImGui;
@@ -7,6 +8,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -21,40 +23,35 @@ public static class DearImGuiInjectionCore
 {
     internal const string HexaVersion = "unity_hexa_net (v2.2.11-pre)";
 
-    public static LoaderKind LoaderKind => Loader.Kind;
-    public static RendererKind RendererKind => RendererManager.Kind;
+    public static LoaderKind LoaderKind => Loader?.Kind ?? LoaderKind.None;
+    public static RendererKind RendererKind => Renderer?.Kind ?? RendererKind.None;
 
     public static bool IsInitialized { get; internal set; }
-
-    public static ImGuiMultiContextCompositor MultiContextCompositor;
-    public static ITextureManager TextureManager;
 
     public static string ConfigPath { get; private set; }
     public static string AssemblyPath { get; private set; }
     public static string AssetsPath { get; private set; }
 
-    internal static IConfigEntry<bool> AllowUpMessages;
-    internal const string AllowUpMessagesCategory = "Input";
-    internal const string AllowUpMessagesKey = "Allow Up Messages";
-    internal const string AllowUpMessagesDescription =
-        "Allows key and mouse release events to pass through, preventing stuck keys when using the UI.";
-    internal const bool AllowUpMessagesDefaultValue = true;
+    public static IConfigEntry<bool> ShowDemoWindow;
+    public static IConfigEntry<bool> AllowUpMessages;
+    public static IConfigEntry<bool> MouseDrawCursor;
+
+    public static ITextureManager TextureManager;
+    public static ImGuiMultiContextCompositor MultiContextCompositor;
+
+    internal static ImGuiRenderer Renderer;
 
     private static ILoader Loader;
 
-    internal static bool Init(ILoader loader, ILog log)
+    internal static bool Init(ILoader loader)
     {
-        Log.Init(log);
-        if (!RendererManager.Init())
-            return false;
         Loader = loader;
+        Log.Init(Loader);
         ConfigPath = Loader.ConfigPath;
         AssemblyPath = Loader.AssemblyPath;
         AssetsPath = Path.Combine(AssemblyPath, "Assets");
         string libraryFileName = $"cimgui-{(Environment.Is64BitProcess ? "x64" : "x86")}.dll";
         string libraryPath = Path.Combine(AssemblyPath, libraryFileName);
-        if (!File.Exists(libraryPath))
-            throw new FileNotFoundException("Cimgui not found. Expected path: " + libraryPath);
         LibraryLoader.CustomLoadFolders.Add(AssemblyPath);
         LibraryLoader.InterceptLibraryName += (ref string libraryName) =>
         {
@@ -75,8 +72,62 @@ public static class DearImGuiInjectionCore
             pathToLibrary = null;
             return false;
         };
-        IsInitialized = true;
+        if (!File.Exists(libraryPath))
+        {
+            Log.Error("Cimgui has been not found. Expected path: " + libraryPath);
+            return false;
+        }
+        foreach (RendererKind kind in Enum.GetValues(typeof(RendererKind)))
+        {
+            ImGuiRenderer renderer = kind switch
+            {
+                RendererKind.DX11 => new ImGuiDX11Renderer(),
+                _ => null
+            };
+            if (renderer == null)
+                continue;
+            bool isSupported = false;
+            try
+            {
+                isSupported = renderer.IsSupported();
+            }
+            catch (Exception e)
+            {
+                Log.Error($"Renderer {renderer.Kind} IsSupported() failed: {e}");
+                isSupported = false;
+            }
+            if (!isSupported)
+                continue;
+            try
+            {
+                renderer.Init();
+                Log.Info($"Renderer {renderer.Kind} Init()");
+                Renderer = renderer;
+                break;
+            }
+            catch (Exception e)
+            {
+                Log.Error($"Renderer {renderer.Kind} Init() failed: {e}");
+                renderer.Dispose();
+                break;
+            }
+        }
+        if (Renderer == null)
+        {
+            Log.Error($"Could not find the right renderer.");
+            return false;
+        }
+        Loader.CreateConfig(ref ShowDemoWindow, "General", "Show Demo Window", false,
+            "Displays the built-in Dear ImGui demo window, useful for testing and debugging the UI.");
+        Loader.CreateConfig(ref AllowUpMessages, "Input", "Allow Up Messages", true,
+            "Allows key and mouse release events to pass through, preventing stuck keys when using the UI.");
+        Loader.CreateConfig(ref MouseDrawCursor, "Input", "Mouse Draw Cursor", false,
+            "Draws the Dear ImGui mouse cursor only while the mouse is hovering over the UI, otherwise the game cursor is used.");
+        Loader.SaveConfig();
         MultiContextCompositor = new();
+        IsInitialized = true;
+        if (ShowDemoWindow.GetValue())
+            CreateModule(Loader.GUID).OnRender = () => { ImGui.ShowDemoWindow(); };
         return true;
     }
 
@@ -89,7 +140,8 @@ public static class DearImGuiInjectionCore
             module.OnInit = null;
             module.OnRender = null;
         }
-        RendererManager.Shutdown();
+        Renderer?.Dispose();
+        Renderer = null;
         foreach (ImGuiModule module in MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
@@ -108,6 +160,11 @@ public static class DearImGuiInjectionCore
 
     public unsafe static ImGuiModule CreateModule(string Id)
     {
+        if (!IsInitialized)
+        {
+            Log.Warning($"DearImGuiInjection has been not initialized.");
+            return null;
+        }
         if (string.IsNullOrWhiteSpace(Id) || MultiContextCompositor.Modules.Any(x => x.Id == Id))
         {
             Log.Warning($"Module \"{Id}\" already has been registered.");
@@ -126,6 +183,11 @@ public static class DearImGuiInjectionCore
 
     public static void DestroyModule(string Id)
     {
+        if (!IsInitialized)
+        {
+            Log.Warning($"DearImGuiInjection has been not initialized.");
+            return;
+        }
         ImGuiModule module = MultiContextCompositor.Modules.FirstOrDefault(x => x.Id == Id);
         if (string.IsNullOrWhiteSpace(Id) || module == null)
         {
@@ -134,10 +196,7 @@ public static class DearImGuiInjectionCore
         }
         MultiContextCompositor.RemoveModule(module);
         ImGui.SetCurrentContext(module.Context);
-        // Implement this differently later once we have more renderers.
-        ImGuiImplDX11.Shutdown();
-        ImGuiImplWin32.Shutdown();
-        ImGui.DestroyPlatformWindows();
+        Renderer.Handler.OnShutdown();
         try
         {
             module.OnDispose?.Invoke();

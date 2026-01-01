@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <Platforms>AnyCPU;x86;x64</Platforms>
+
+    <OutputType>Exe</OutputType>
+    <RuntimeIdentifier>win-$(Platform)</RuntimeIdentifier>
+  </PropertyGroup>
+
+</Project>
