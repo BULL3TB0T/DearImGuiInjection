@@ -3,6 +3,8 @@
     <PackExclude Include="FASM" />
   </ItemGroup>
   <PropertyGroup>
+    <!-- Build twice to ensure all target outputs are copied to the pack directory. -->
+
     <!-- 
     https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html#initializing-a-plugin-project-from-template
     https://melonwiki.xyz/#/modders/quickstart?id=basic-mod-setup
