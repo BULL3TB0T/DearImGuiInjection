@@ -44,8 +44,6 @@ internal sealed class ImGuiDX11Handler : ImGuiHandler
 
     internal unsafe void OnPresent(SwapChain swapChain, uint syncInterval, uint flags)
     {
-        if (!DearImGuiInjectionCore.IsInitialized)
-            return;
         if (!IsInitialized)
         {
             _device = swapChain.GetDevice<Device>();

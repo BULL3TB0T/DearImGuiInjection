@@ -11,4 +11,5 @@ internal class ConfigEntryMelon<T> : IConfigEntry<T>
     public ConfigEntryMelon(MelonPreferences_Entry<T> configEntry) => _melonPreferenceEntry = configEntry;
 
     public T GetValue() => _melonPreferenceEntry.Value;
+    public T SetValue(T value) => _melonPreferenceEntry.Value = value;
 }

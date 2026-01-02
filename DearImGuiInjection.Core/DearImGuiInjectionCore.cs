@@ -1,14 +1,10 @@
-﻿using DearImGuiInjection.Backends;
-using DearImGuiInjection.Handlers;
-using DearImGuiInjection.Renderers;
+﻿using DearImGuiInjection.Renderers;
 using DearImGuiInjection.Textures;
 using Hexa.NET.ImGui;
 using HexaGen.Runtime;
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -26,8 +22,6 @@ public static class DearImGuiInjectionCore
 
     public static LoaderKind LoaderKind => Loader?.Kind ?? LoaderKind.None;
     public static RendererKind RendererKind => Renderer?.Kind ?? RendererKind.None;
-
-    public static bool IsInitialized { get; internal set; }
 
     public static string ConfigPath { get; private set; }
     public static string AssemblyPath { get; private set; }
@@ -121,7 +115,6 @@ public static class DearImGuiInjectionCore
             "Draws the Dear ImGui mouse cursor only while the mouse is hovering over the UI, otherwise the game cursor is used.");
         Loader.SaveConfig();
         MultiContextCompositor = new();
-        IsInitialized = true;
         if (ShowDemoWindow.GetValue())
             CreateModule("DearImGuiInjection").OnRender = () => { ImGui.ShowDemoWindow(); };
         return true;
@@ -129,8 +122,6 @@ public static class DearImGuiInjectionCore
 
     internal static void Dispose()
     {
-        if (!IsInitialized)
-            return;
         foreach (ImGuiModule module in MultiContextCompositor.Modules)
         {
             module.OnInit = null;
@@ -156,11 +147,6 @@ public static class DearImGuiInjectionCore
 
     public unsafe static ImGuiModule CreateModule(string Id)
     {
-        if (!IsInitialized)
-        {
-            Log.Warning($"DearImGuiInjection has been not initialized.");
-            return null;
-        }
         if (string.IsNullOrWhiteSpace(Id) || MultiContextCompositor.Modules.Any(x => x.Id == Id))
         {
             Log.Warning($"Module \"{Id}\" already has been registered.");
@@ -180,11 +166,6 @@ public static class DearImGuiInjectionCore
 
     public static void DestroyModule(string Id)
     {
-        if (!IsInitialized)
-        {
-            Log.Warning($"DearImGuiInjection has been not initialized.");
-            return;
-        }
         ImGuiModule module = MultiContextCompositor.Modules.FirstOrDefault(x => x.Id == Id);
         if (string.IsNullOrWhiteSpace(Id) || module == null)
         {
@@ -193,7 +174,7 @@ public static class DearImGuiInjectionCore
         }
         MultiContextCompositor.RemoveModule(module);
         ImGui.SetCurrentContext(module.Context);
-        Renderer.Handler.OnShutdown();
+        Renderer?.Handler.OnShutdown();
         try
         {
             module.OnDispose?.Invoke();
