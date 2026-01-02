@@ -8,6 +8,8 @@
     <!-- 
     https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html#initializing-a-plugin-project-from-template
     https://melonwiki.xyz/#/modders/quickstart?id=basic-mod-setup
+    Or
+    Use the Tools.TargetFrameworkDetector to detect the game's framework.
     -->
     <MonoTargetFramework>net472</MonoTargetFramework>
     <!-- Set to true when building for Mono-based loaders. Using false with Mono loaders will cause runtime issues or freezes. -->
