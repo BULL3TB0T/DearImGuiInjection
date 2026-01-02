@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
 
-    <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP;MelonMono</Configurations>
+    <Configurations>Debug;Release;BepInEx5;BepInExIL2CPP;MelonIL2CPP;MelonMono;BepInEx6</Configurations>
     <Platforms>AnyCPU;x86;x64</Platforms>
 
     <EnableNETAnalyzers>false</EnableNETAnalyzers>

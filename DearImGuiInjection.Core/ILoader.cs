@@ -6,6 +6,7 @@ public enum LoaderKind
 {
     None,
     BepInEx5,
+    BepInEx6,
     BepInExIL2CPP,
     MelonIL2CPP,
     MelonMono

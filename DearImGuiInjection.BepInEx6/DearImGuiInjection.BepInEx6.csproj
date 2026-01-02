@@ -18,8 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="LavaGang.MelonLoader" Version="*" PrivateAssets="all" />
-    <PackageReference Include="UnityEngine" Version="5.*" />
+    <PackageReference Include="BepInEx.Unity.Mono" Version="6.*-*" />
   </ItemGroup>
 
   <ItemGroup>
