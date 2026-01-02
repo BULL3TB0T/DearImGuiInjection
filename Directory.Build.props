@@ -7,7 +7,7 @@
     https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html#initializing-a-plugin-project-from-template
     https://melonwiki.xyz/#/modders/quickstart?id=basic-mod-setup
     -->
-    <MonoTargetFramework>net462</MonoTargetFramework>
+    <MonoTargetFramework>net472</MonoTargetFramework>
     <CoreUsesMonoTargetFramework>false</CoreUsesMonoTargetFramework>
 
     <StartSteamGameAfterBuild>false</StartSteamGameAfterBuild>
@@ -28,8 +28,8 @@
     <CimguiFolderName>Cimgui</CimguiFolderName>
     <CimguiDir>$(LibsDir)$(CimguiFolderName)\</CimguiDir>
 
-    <FasmFolderName>FASM</FasmFolderName>
-    <FasmDir>$(LibsDir)$(FasmFolderName)\</FasmDir>
+    <MinhookDirFolderName>MinHook</MinhookDirFolderName>
+    <MinhookDir>$(LibsDir)$(MinhookDirFolderName)\</MinhookDir>
 
     <IL2CPPFolderName>IL2CPP</IL2CPPFolderName>
     <IL2CPPDir>$(LibsDir)$(IL2CPPFolderName)\</IL2CPPDir>

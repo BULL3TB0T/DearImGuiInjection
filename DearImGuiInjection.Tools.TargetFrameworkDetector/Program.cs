@@ -53,7 +53,7 @@ internal static class Program
             if (mscorlibVersion != null)
             {
                 Console.WriteLine($"Mscorlib {mscorlibVersion} has been found.");
-                targetFramework = mscorlibVersion.Major >= 4 ? "net462" : "net35";
+                targetFramework = mscorlibVersion.Major >= 4 ? "net472" : "net35";
             }
             else
                 Console.WriteLine("Mscorlib has been found but version could not be read.");

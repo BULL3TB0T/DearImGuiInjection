@@ -5,12 +5,14 @@ namespace DearImGuiInjection.Windows;
 
 internal static class Gdi32
 {
-    [DllImport("gdi32.dll")]
+    private const string Dll = "gdi32.dll";
+
+    [DllImport(Dll)]
     public static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
 
-    [DllImport("gdi32.dll", EntryPoint = "DeleteObject")]
+    [DllImport(Dll, EntryPoint = "DeleteObject")]
     public static extern bool DeleteObject(IntPtr hObject);
 
-    [DllImport("gdi32.dll")]
+    [DllImport(Dll)]
     public static extern int GetDeviceCaps(IntPtr hdc, int index);
 }

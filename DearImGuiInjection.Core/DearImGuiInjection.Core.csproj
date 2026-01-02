@@ -26,7 +26,6 @@
     <!-- 
     <PackageReference Include="Hexa.NET.ImGui" Version="2.2.10-*" />
     -->
-    <PackageReference Include="Reloaded.Hooks" Version="4.3.3" />
     <PackageReference Include="SharpDX" Version="4.2.0" />
     <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
     <PackageReference Include="SharpDX.Direct2D1" Version="4.2.0" />
@@ -52,12 +51,12 @@
 
   <ItemGroup Condition="'$(Platform)'=='x86' Or '$(Platform)'=='AnyCPU'">
     <CimguiFiles Include="$(CimguiDir)cimgui-x86.dll" />
-    <FasmFiles Include="$(FasmDir)FASM.DLL" />
+    <MinhookFiles Include="$(MinhookDir)MinHook-x86.dll" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(Platform)'=='x64' Or '$(Platform)'=='AnyCPU'">
     <CimguiFiles Include="$(CimguiDir)cimgui-x64.dll" />
-    <FasmFiles Include="$(FasmDir)FASMX64.DLL" />
+    <MinhookFiles Include="$(MinhookDir)MinHook-x64.dll" />
   </ItemGroup>
 
   <Target Name="PackFilesToDirectory" AfterTargets="Build" Condition="'$(Configuration)'!='Debug' And '$(TargetFramework)'!=''">
@@ -65,7 +64,7 @@
     <Copy SourceFiles="@(PackFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(HexaFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(CimguiFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(FasmFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(MinhookFiles)" DestinationFolder="$(PackDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(AssetFiles)" DestinationFiles="@(AssetFiles->'$(PackDir)$(AssetsFolderName)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CleanPackedFiles" AfterTargets="Clean" Condition="'$(Configuration)'!='Debug' And Exists('$(PackDir)') And '$(TargetFramework)'!=''">

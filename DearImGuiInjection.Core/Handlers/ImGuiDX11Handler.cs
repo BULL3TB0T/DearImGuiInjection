@@ -104,6 +104,8 @@ internal sealed class ImGuiDX11Handler : ImGuiHandler
     {
         if (!IsInitialized)
             return;
+        _renderTargetView?.Dispose();
+        _renderTargetView = null;
         foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);

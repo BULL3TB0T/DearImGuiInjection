@@ -15,8 +15,6 @@ internal interface ILoader
 {
     public LoaderKind Kind { get; }
 
-    public string GUID { get; }
-
     public string ConfigPath { get; }
     public string AssemblyPath { get; }
 

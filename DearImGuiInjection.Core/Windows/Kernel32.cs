@@ -6,32 +6,43 @@ namespace DearImGuiInjection.Windows;
 
 internal static class Kernel32
 {
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Ansi)]
+    private const string Dll = "kernel32.dll";
+
+    [DllImport(Dll, CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr GetModuleHandle([MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
+
+    [DllImport(Dll, CharSet = CharSet.Ansi, SetLastError = true)]
     public static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)] string lpFileName);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport(Dll, SetLastError = true)]
     public static extern bool FreeLibrary(IntPtr hModule);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+    [DllImport(Dll, CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
     public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport(Dll, SetLastError = true)]
     public static extern bool QueryPerformanceCounter(out long lpPerformanceCount);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport(Dll, SetLastError = true)]
     public static extern bool QueryPerformanceFrequency(out long frequency);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    public unsafe static extern int MultiByteToWideChar(uint codePage, uint dwFlags, byte* lpMultiByteStr, 
-        int cbMultiByte, char* lpWideCharStr, int cchWideChar);
+    [DllImport(Dll, SetLastError = true)]
+    public static extern uint GetLocaleInfoA(uint Locale, uint LCType, IntPtr lpLCData, int cchData);
+
+    [DllImport(Dll, SetLastError = true)]
+    public static unsafe extern int MultiByteToWideChar(
+        uint codePage,
+        uint dwFlags,
+        byte* lpMultiByteStr,
+        int cbMultiByte,
+        char* lpWideCharStr,
+        int cchWideChar);
 
     [SecurityCritical, SuppressUnmanagedCodeSecurity]
-    [DllImport("kernel32.dll", CallingConvention = CallingConvention.Winapi)]
+    [DllImport(Dll, CallingConvention = CallingConvention.Winapi)]
     private static extern ulong VerSetConditionMask(ulong dwlConditionMask, uint dwTypeBitMask, byte dwConditionMask);
 
     [SecuritySafeCritical]
     public static void VER_SET_CONDITION(ref ulong dwlConditionMask, uint dwTypeBitMask, byte dwConditionMask)
         => dwlConditionMask = VerSetConditionMask(dwlConditionMask, dwTypeBitMask, dwConditionMask);
-
-    public static ushort HiByte(ushort wValue) => (ushort)((wValue >> 8) & 0xFF);
 }

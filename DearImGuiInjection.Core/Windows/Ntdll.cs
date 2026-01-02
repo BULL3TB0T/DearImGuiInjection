@@ -46,14 +46,12 @@ internal enum NtStatus : uint
     ProcessCloned = 0x00000129,
     FileLockedWithOnlyReaders = 0x0000012a,
     FileLockedWithWriters = 0x0000012b,
-
     Informational = 0x40000000,
     ObjectNameExists = 0x40000000,
     ThreadWasSuspended = 0x40000001,
     WorkingSetLimitRange = 0x40000002,
     ImageNotAtBase = 0x40000003,
     RegistryRecovered = 0x40000009,
-
     Warning = 0x80000000,
     GuardPageViolation = 0x80000001,
     DatatypeMisalignment = 0x80000002,
@@ -69,7 +67,6 @@ internal enum NtStatus : uint
     NoMoreEntries = 0x8000001a,
     LongJump = 0x80000026,
     DllMightBeInsecure = 0x8000002b,
-
     Error = 0xc0000000,
     Unsuccessful = 0xc0000001,
     NotImplemented = 0xc0000002,
@@ -337,7 +334,6 @@ internal enum NtStatus : uint
     TransactionRequiredPromotion = 0xc0190043,
     CannotExecuteFileInTransaction = 0xc0190044,
     TransactionsNotFrozen = 0xc0190045,
-
     MaximumNtStatus = 0xffffffff
 }
 
@@ -398,6 +394,8 @@ internal unsafe partial struct OSVERSIONINFOEX
 
 internal static class Ntdll
 {
-    [DllImport("ntdll.dll")]
+    private const string Dll = "ntdll.dll";
+
+    [DllImport(Dll)]
     public unsafe static extern NtStatus RtlVerifyVersionInfo(OSVERSIONINFOEX* VersionInfo, VER_MASK TypeMask, long ConditionMask);
 }

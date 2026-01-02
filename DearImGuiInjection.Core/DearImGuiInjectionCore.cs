@@ -46,11 +46,10 @@ public static class DearImGuiInjectionCore
     internal static bool Init(ILoader loader)
     {
         Loader = loader;
-        Log.Init(Loader);
-        ConfigPath = Loader.ConfigPath;
+        ConfigPath = Path.Combine(Loader.ConfigPath, "DearImGuiInjection");
         AssemblyPath = Loader.AssemblyPath;
         AssetsPath = Path.Combine(AssemblyPath, "Assets");
-        string libraryFileName = $"cimgui-{(Environment.Is64BitProcess ? "x64" : "x86")}.dll";
+        string libraryFileName = $"cimgui-{(IntPtr.Size == 8 ? "x64" : "x86")}.dll";
         string libraryPath = Path.Combine(AssemblyPath, libraryFileName);
         LibraryLoader.CustomLoadFolders.Add(AssemblyPath);
         LibraryLoader.InterceptLibraryName += (ref string libraryName) =>
@@ -72,11 +71,7 @@ public static class DearImGuiInjectionCore
             pathToLibrary = null;
             return false;
         };
-        if (!File.Exists(libraryPath))
-        {
-            Log.Error("Cimgui has been not found. Expected path: " + libraryPath);
-            return false;
-        }
+        Log.Init(Loader);
         foreach (RendererKind kind in Enum.GetValues(typeof(RendererKind)))
         {
             ImGuiRenderer renderer = kind switch
@@ -127,7 +122,7 @@ public static class DearImGuiInjectionCore
         MultiContextCompositor = new();
         IsInitialized = true;
         if (ShowDemoWindow.GetValue())
-            CreateModule(Loader.GUID).OnRender = () => { ImGui.ShowDemoWindow(); };
+            CreateModule("DearImGuiInjection").OnRender = () => { ImGui.ShowDemoWindow(); };
         return true;
     }
 
@@ -175,7 +170,8 @@ public static class DearImGuiInjectionCore
         ImGui.SetCurrentContext(module.Context);
         var io = ImGui.GetIO();
         module.IO = io;
-        io.IniFilename = (byte*)Marshal.StringToHGlobalAnsi($"imgui_{Id}.ini");
+        Directory.CreateDirectory(ConfigPath);
+        io.IniFilename = (byte*)Marshal.StringToHGlobalAnsi(Path.Combine(ConfigPath, $"{Id}.ini"));
         module.PlatformIO = ImGui.GetPlatformIO();
         MultiContextCompositor.AddModule(module);
         return module;

@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Drawing;
+using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace DearImGuiInjection.Windows;
@@ -13,19 +14,15 @@ public enum VirtualKey : int
     VK_MBUTTON = 0x04,
     VK_XBUTTON1 = 0x05,
     VK_XBUTTON2 = 0x06,
-
     VK_BACK = 0x08,
     VK_TAB = 0x09,
-
     VK_CLEAR = 0x0C,
     VK_RETURN = 0x0D,
-
     VK_SHIFT = 0x10,
     VK_CONTROL = 0x11,
     VK_MENU = 0x12,
     VK_PAUSE = 0x13,
     VK_CAPITAL = 0x14,
-
     VK_KANA = 0x15,
     VK_HANGUL = 0x15,
     VK_IME_ON = 0x16,
@@ -34,13 +31,11 @@ public enum VirtualKey : int
     VK_HANJA = 0x19,
     VK_KANJI = 0x19,
     VK_IME_OFF = 0x1A,
-
     VK_ESCAPE = 0x1B,
     VK_CONVERT = 0x1C,
     VK_NONCONVERT = 0x1D,
     VK_ACCEPT = 0x1E,
     VK_MODECHANGE = 0x1F,
-
     VK_SPACE = 0x20,
     VK_PRIOR = 0x21,
     VK_NEXT = 0x22,
@@ -57,7 +52,6 @@ public enum VirtualKey : int
     VK_INSERT = 0x2D,
     VK_DELETE = 0x2E,
     VK_HELP = 0x2F,
-
     VK_0 = 0x30,
     VK_1 = 0x31,
     VK_2 = 0x32,
@@ -68,7 +62,6 @@ public enum VirtualKey : int
     VK_7 = 0x37,
     VK_8 = 0x38,
     VK_9 = 0x39,
-
     VK_A = 0x41,
     VK_B = 0x42,
     VK_C = 0x43,
@@ -95,12 +88,10 @@ public enum VirtualKey : int
     VK_X = 0x58,
     VK_Y = 0x59,
     VK_Z = 0x5A,
-
     VK_LWIN = 0x5B,
     VK_RWIN = 0x5C,
     VK_APPS = 0x5D,
     VK_SLEEP = 0x5F,
-
     VK_NUMPAD0 = 0x60,
     VK_NUMPAD1 = 0x61,
     VK_NUMPAD2 = 0x62,
@@ -111,14 +102,12 @@ public enum VirtualKey : int
     VK_NUMPAD7 = 0x67,
     VK_NUMPAD8 = 0x68,
     VK_NUMPAD9 = 0x69,
-
     VK_MULTIPLY = 0x6A,
     VK_ADD = 0x6B,
     VK_SEPARATOR = 0x6C,
     VK_SUBTRACT = 0x6D,
     VK_DECIMAL = 0x6E,
     VK_DIVIDE = 0x6F,
-
     VK_F1 = 0x70,
     VK_F2 = 0x71,
     VK_F3 = 0x72,
@@ -143,17 +132,14 @@ public enum VirtualKey : int
     VK_F22 = 0x85,
     VK_F23 = 0x86,
     VK_F24 = 0x87,
-
     VK_NUMLOCK = 0x90,
     VK_SCROLL = 0x91,
-
     VK_LSHIFT = 0xA0,
     VK_RSHIFT = 0xA1,
     VK_LCONTROL = 0xA2,
     VK_RCONTROL = 0xA3,
     VK_LMENU = 0xA4,
     VK_RMENU = 0xA5,
-
     VK_BROWSER_BACK = 0xA6,
     VK_BROWSER_FORWARD = 0xA7,
     VK_BROWSER_REFRESH = 0xA8,
@@ -161,21 +147,17 @@ public enum VirtualKey : int
     VK_BROWSER_SEARCH = 0xAA,
     VK_BROWSER_FAVORITES = 0xAB,
     VK_BROWSER_HOME = 0xAC,
-
     VK_VOLUME_MUTE = 0xAD,
     VK_VOLUME_DOWN = 0xAE,
     VK_VOLUME_UP = 0xAF,
-
     VK_MEDIA_NEXT_TRACK = 0xB0,
     VK_MEDIA_PREV_TRACK = 0xB1,
     VK_MEDIA_STOP = 0xB2,
     VK_MEDIA_PLAY_PAUSE = 0xB3,
-
     VK_LAUNCH_MAIL = 0xB4,
     VK_LAUNCH_MEDIA_SELECT = 0xB5,
     VK_LAUNCH_APP1 = 0xB6,
     VK_LAUNCH_APP2 = 0xB7,
-
     VK_OEM_1 = 0xBA,
     VK_OEM_PLUS = 0xBB,
     VK_OEM_COMMA = 0xBC,
@@ -183,7 +165,14 @@ public enum VirtualKey : int
     VK_OEM_PERIOD = 0xBE,
     VK_OEM_2 = 0xBF,
     VK_OEM_3 = 0xC0,
-
+    VK_OEM_4 = 0xDB,
+    VK_OEM_5 = 0xDC,
+    VK_OEM_6 = 0xDD,
+    VK_OEM_7 = 0xDE,
+    VK_OEM_8 = 0xDF,
+    VK_OEM_102 = 0xE2,
+    VK_PROCESSKEY = 0xE5,
+    VK_PACKET = 0xE7,
     VK_GAMEPAD_A = 0xC3,
     VK_GAMEPAD_B = 0xC4,
     VK_GAMEPAD_X = 0xC5,
@@ -208,17 +197,6 @@ public enum VirtualKey : int
     VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN = 0xD8,
     VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT = 0xD9,
     VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT = 0xDA,
-
-    VK_OEM_4 = 0xDB,
-    VK_OEM_5 = 0xDC,
-    VK_OEM_6 = 0xDD,
-    VK_OEM_7 = 0xDE,
-    VK_OEM_8 = 0xDF,
-
-    VK_OEM_102 = 0xE2,
-    VK_PROCESSKEY = 0xE5,
-    VK_PACKET = 0xE7,
-
     VK_ATTN = 0xF6,
     VK_CRSEL = 0xF7,
     VK_EXSEL = 0xF8,
@@ -227,493 +205,251 @@ public enum VirtualKey : int
     VK_ZOOM = 0xFB,
     VK_NONAME = 0xFC,
     VK_PA1 = 0xFD,
-    VK_OEM_CLEAR = 0xFE,
+    VK_OEM_CLEAR = 0xFE
 }
 
 public enum WindowMessage : uint
 {
     WM_NULL = 0x0000,
-
     WM_CREATE = 0x0001,
-
     WM_DESTROY = 0x0002,
-
     WM_MOVE = 0x0003,
-
     WM_SIZE = 0x0005,
-
     WM_ACTIVATE = 0x0006,
-
     WM_SETFOCUS = 0x0007,
-
     WM_KILLFOCUS = 0x0008,
-
     WM_ENABLE = 0x000A,
-
     WM_SETREDRAW = 0x000B,
-
     WM_SETTEXT = 0x000C,
-
     WM_GETTEXT = 0x000D,
-
     WM_GETTEXTLENGTH = 0x000E,
-
     WM_PAINT = 0x000F,
-
     WM_CLOSE = 0x0010,
-
     WM_QUERYENDSESSION = 0x0011,
-
-    WM_QUERYOPEN = 0x0013,
-
-    WM_ENDSESSION = 0x0016,
-
     WM_QUIT = 0x0012,
-
+    WM_QUERYOPEN = 0x0013,
     WM_ERASEBKGND = 0x0014,
-
     WM_SYSCOLORCHANGE = 0x0015,
-
+    WM_ENDSESSION = 0x0016,
     WM_SHOWWINDOW = 0x0018,
-
     WM_WININICHANGE = 0x001A,
-
     WM_SETTINGCHANGE = WM_WININICHANGE,
-
     WM_DEVMODECHANGE = 0x001B,
-
     WM_ACTIVATEAPP = 0x001C,
-
     WM_FONTCHANGE = 0x001D,
-
     WM_TIMECHANGE = 0x001E,
-
     WM_CANCELMODE = 0x001F,
-
     WM_SETCURSOR = 0x0020,
-
     WM_MOUSEACTIVATE = 0x0021,
-
     WM_CHILDACTIVATE = 0x0022,
-
     WM_QUEUESYNC = 0x0023,
-
     WM_GETMINMAXINFO = 0x0024,
-
     WM_PAINTICON = 0x0026,
-
     WM_ICONERASEBKGND = 0x0027,
-
     WM_NEXTDLGCTL = 0x0028,
-
     WM_SPOOLERSTATUS = 0x002A,
-
     WM_DRAWITEM = 0x002B,
-
     WM_MEASUREITEM = 0x002C,
-
     WM_DELETEITEM = 0x002D,
-
     WM_VKEYTOITEM = 0x002E,
-
     WM_CHARTOITEM = 0x002F,
-
     WM_SETFONT = 0x0030,
-
     WM_GETFONT = 0x0031,
-
     WM_SETHOTKEY = 0x0032,
-
     WM_GETHOTKEY = 0x0033,
-
     WM_QUERYDRAGICON = 0x0037,
-
     WM_COMPAREITEM = 0x0039,
-
     WM_GETOBJECT = 0x003D,
-
     WM_COMPACTING = 0x0041,
-
-    [Obsolete]
-    WM_COMMNOTIFY = 0x0044,
-
+    [Obsolete] WM_COMMNOTIFY = 0x0044,
     WM_WINDOWPOSCHANGING = 0x0046,
-
     WM_WINDOWPOSCHANGED = 0x0047,
-
-    [Obsolete]
-    WM_POWER = 0x0048,
-
+    [Obsolete] WM_POWER = 0x0048,
     WM_COPYDATA = 0x004A,
-
     WM_CANCELJOURNAL = 0x004B,
-
     WM_NOTIFY = 0x004E,
-
     WM_INPUTLANGCHANGEREQUEST = 0x0050,
-
     WM_INPUTLANGCHANGE = 0x0051,
-
     WM_TCARD = 0x0052,
-
     WM_HELP = 0x0053,
-
     WM_USERCHANGED = 0x0054,
-
     WM_NOTIFYFORMAT = 0x0055,
-
     WM_CONTEXTMENU = 0x007B,
-
     WM_STYLECHANGING = 0x007C,
-
     WM_STYLECHANGED = 0x007D,
-
     WM_DISPLAYCHANGE = 0x007E,
-
     WM_GETICON = 0x007F,
-
     WM_SETICON = 0x0080,
-
     WM_NCCREATE = 0x0081,
-
     WM_NCDESTROY = 0x0082,
-
     WM_NCCALCSIZE = 0x0083,
-
     WM_NCHITTEST = 0x0084,
-
     WM_NCPAINT = 0x0085,
-
     WM_NCACTIVATE = 0x0086,
-
     WM_GETDLGCODE = 0x0087,
-
     WM_SYNCPAINT = 0x0088,
-
     WM_UAHDESTROYWINDOW = 0x0090,
-
     WM_UAHDRAWMENU = 0x0091,
-
     WM_UAHDRAWMENUITEM = 0x0092,
-
     WM_UAHINITMENU = 0x0093,
-
     WM_UAHMEASUREMENUITEM = 0x0094,
-
     WM_UAHNCPAINTMENUPOPUP = 0x0095,
-
     WM_NCMOUSEMOVE = 0x00A0,
-
     WM_NCLBUTTONDOWN = 0x00A1,
-
     WM_NCLBUTTONUP = 0x00A2,
-
     WM_NCLBUTTONDBLCLK = 0x00A3,
-
     WM_NCRBUTTONDOWN = 0x00A4,
-
     WM_NCRBUTTONUP = 0x00A5,
-
     WM_NCRBUTTONDBLCLK = 0x00A6,
-
     WM_NCMBUTTONDOWN = 0x00A7,
-
     WM_NCMBUTTONUP = 0x00A8,
-
     WM_NCMBUTTONDBLCLK = 0x00A9,
-
     WM_NCXBUTTONDOWN = 0x00AB,
-
     WM_NCXBUTTONUP = 0x00AC,
-
     WM_NCXBUTTONDBLCLK = 0x00AD,
-
     WM_BM_CLICK = 0x00F5,
-
     WM_INPUT_DEVICE_CHANGE = 0x00FE,
-
     WM_INPUT = 0x00FF,
-
     WM_KEYFIRST = 0x0100,
-
     WM_KEYDOWN = 0x0100,
-
     WM_KEYUP = 0x0101,
-
     WM_CHAR = 0x0102,
-
     WM_DEADCHAR = 0x0103,
-
     WM_SYSKEYDOWN = 0x0104,
-
     WM_SYSKEYUP = 0x0105,
-
     WM_SYSCHAR = 0x0106,
-
     WM_SYSDEADCHAR = 0x0107,
-
     WM_UNICHAR = 0x0109,
-
     WM_KEYLAST = 0x0109,
-
     WM_IME_STARTCOMPOSITION = 0x010D,
-
     WM_IME_ENDCOMPOSITION = 0x010E,
-
     WM_IME_COMPOSITION = 0x010F,
-
     WM_IME_KEYLAST = 0x010F,
-
     WM_INITDIALOG = 0x0110,
-
     WM_COMMAND = 0x0111,
-
     WM_SYSCOMMAND = 0x0112,
-
     WM_TIMER = 0x0113,
-
     WM_HSCROLL = 0x0114,
-
     WM_VSCROLL = 0x0115,
-
     WM_INITMENU = 0x0116,
-
     WM_INITMENUPOPUP = 0x0117,
-
     WM_MENUSELECT = 0x011F,
-
     WM_MENUCHAR = 0x0120,
-
     WM_ENTERIDLE = 0x0121,
-
     WM_MENURBUTTONUP = 0x0122,
-
     WM_MENUDRAG = 0x0123,
-
     WM_MENUGETOBJECT = 0x0124,
-
     WM_UNINITMENUPOPUP = 0x0125,
-
     WM_MENUCOMMAND = 0x0126,
-
     WM_CHANGEUISTATE = 0x0127,
-
     WM_UPDATEUISTATE = 0x0128,
-
     WM_QUERYUISTATE = 0x0129,
-
     WM_CTLCOLORMSGBOX = 0x0132,
-
     WM_CTLCOLOREDIT = 0x0133,
-
     WM_CTLCOLORLISTBOX = 0x0134,
-
     WM_CTLCOLORBTN = 0x0135,
-
     WM_CTLCOLORDLG = 0x0136,
-
     WM_CTLCOLORSCROLLBAR = 0x0137,
-
     WM_CTLCOLORSTATIC = 0x0138,
-
     WM_MOUSEFIRST = 0x0200,
-
     WM_MOUSEMOVE = 0x0200,
-
     WM_LBUTTONDOWN = 0x0201,
-
     WM_LBUTTONUP = 0x0202,
-
     WM_LBUTTONDBLCLK = 0x0203,
-
     WM_RBUTTONDOWN = 0x0204,
-
     WM_RBUTTONUP = 0x0205,
-
     WM_RBUTTONDBLCLK = 0x0206,
-
     WM_MBUTTONDOWN = 0x0207,
-
     WM_MBUTTONUP = 0x0208,
-
     WM_MBUTTONDBLCLK = 0x0209,
-
     WM_MOUSEWHEEL = 0x020A,
-
     WM_XBUTTONDOWN = 0x020B,
-
     WM_XBUTTONUP = 0x020C,
-
     WM_XBUTTONDBLCLK = 0x020D,
-
     WM_MOUSEHWHEEL = 0x020E,
-
     WM_MOUSELAST = 0x020E,
-
     WM_PARENTNOTIFY = 0x0210,
-
     WM_ENTERMENULOOP = 0x0211,
-
     WM_EXITMENULOOP = 0x0212,
-
     WM_NEXTMENU = 0x0213,
-
     WM_SIZING = 0x0214,
-
     WM_CAPTURECHANGED = 0x0215,
-
     WM_MOVING = 0x0216,
-
     WM_POWERBROADCAST = 0x0218,
-
     WM_DEVICECHANGE = 0x0219,
-
     WM_MDICREATE = 0x0220,
-
     WM_MDIDESTROY = 0x0221,
-
     WM_MDIACTIVATE = 0x0222,
-
     WM_MDIRESTORE = 0x0223,
-
     WM_MDINEXT = 0x0224,
-
     WM_MDIMAXIMIZE = 0x0225,
-
     WM_MDITILE = 0x0226,
-
     WM_MDICASCADE = 0x0227,
-
     WM_MDIICONARRANGE = 0x0228,
-
     WM_MDIGETACTIVE = 0x0229,
-
     WM_MDISETMENU = 0x0230,
-
     WM_ENTERSIZEMOVE = 0x0231,
-
     WM_EXITSIZEMOVE = 0x0232,
-
     WM_DROPFILES = 0x0233,
-
     WM_MDIREFRESHMENU = 0x0234,
-
     WM_IME_SETCONTEXT = 0x0281,
-
     WM_IME_NOTIFY = 0x0282,
-
     WM_IME_CONTROL = 0x0283,
-
     WM_IME_COMPOSITIONFULL = 0x0284,
-
     WM_IME_SELECT = 0x0285,
-
     WM_IME_CHAR = 0x0286,
-
     WM_IME_REQUEST = 0x0288,
-
     WM_IME_KEYDOWN = 0x0290,
-
     WM_IME_KEYUP = 0x0291,
-
     WM_MOUSEHOVER = 0x02A1,
-
     WM_MOUSELEAVE = 0x02A3,
-
     WM_NCMOUSEHOVER = 0x02A0,
-
     WM_NCMOUSELEAVE = 0x02A2,
-
     WM_WTSSESSION_CHANGE = 0x02B1,
-
-    WM_TABLET_FIRST = 0x02c0,
-
-    WM_TABLET_LAST = 0x02df,
-
+    WM_TABLET_FIRST = 0x02C0,
+    WM_TABLET_LAST = 0x02DF,
     WM_DPICHANGED = 0x02E0,
-
     WM_CUT = 0x0300,
-
     WM_COPY = 0x0301,
-
     WM_PASTE = 0x0302,
-
     WM_CLEAR = 0x0303,
-
     WM_UNDO = 0x0304,
-
     WM_RENDERFORMAT = 0x0305,
-
     WM_RENDERALLFORMATS = 0x0306,
-
     WM_DESTROYCLIPBOARD = 0x0307,
-
     WM_DRAWCLIPBOARD = 0x0308,
-
     WM_PAINTCLIPBOARD = 0x0309,
-
     WM_VSCROLLCLIPBOARD = 0x030A,
-
     WM_SIZECLIPBOARD = 0x030B,
-
     WM_ASKCBFORMATNAME = 0x030C,
-
     WM_CHANGECBCHAIN = 0x030D,
-
     WM_HSCROLLCLIPBOARD = 0x030E,
-
     WM_QUERYNEWPALETTE = 0x030F,
-
     WM_PALETTEISCHANGING = 0x0310,
-
     WM_PALETTECHANGED = 0x0311,
-
     WM_HOTKEY = 0x0312,
-
     WM_PRINT = 0x0317,
-
     WM_PRINTCLIENT = 0x0318,
-
     WM_APPCOMMAND = 0x0319,
-
     WM_THEMECHANGED = 0x031A,
-
     WM_CLIPBOARDUPDATE = 0x031D,
-
     WM_DWMCOMPOSITIONCHANGED = 0x031E,
-
     WM_DWMNCRENDERINGCHANGED = 0x031F,
-
     WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320,
-
     WM_DWMWINDOWMAXIMIZEDCHANGE = 0x0321,
-
     WM_GETTITLEBARINFOEX = 0x033F,
-
     WM_HANDHELDFIRST = 0x0358,
-
     WM_HANDHELDLAST = 0x035F,
-
     WM_AFXFIRST = 0x0360,
-
     WM_AFXLAST = 0x037F,
-
     WM_PENWINFIRST = 0x0380,
-
     WM_PENWINLAST = 0x038F,
-
     WM_APP = 0x8000,
-
     WM_USER = 0x0400,
-
     WM_CPL_LAUNCH = WM_USER + 0x1000,
-
     WM_CPL_LAUNCHED = WM_USER + 0x1001,
-
     WM_REFLECT = WM_USER + 0x1C00,
-
-    WM_SYSTIMER = 0x118,
-
+    WM_SYSTIMER = 0x0118
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -771,24 +507,24 @@ public struct RECT
         set { Right = value + Left; }
     }
 
-    public System.Drawing.Point Location
+    public Point Location
     {
-        get { return new System.Drawing.Point(Left, Top); }
+        get { return new Point(Left, Top); }
         set { X = value.X; Y = value.Y; }
     }
 
-    public System.Drawing.Size Size
+    public Size Size
     {
-        get { return new System.Drawing.Size(Width, Height); }
+        get { return new Size(Width, Height); }
         set { Width = value.Width; Height = value.Height; }
     }
 
-    public static implicit operator System.Drawing.Rectangle(RECT r)
+    public static implicit operator Rectangle(RECT r)
     {
-        return new System.Drawing.Rectangle(r.Left, r.Top, r.Width, r.Height);
+        return new Rectangle(r.Left, r.Top, r.Width, r.Height);
     }
 
-    public static implicit operator RECT(System.Drawing.Rectangle r)
+    public static implicit operator RECT(Rectangle r)
     {
         return new RECT(r);
     }
@@ -824,12 +560,32 @@ public struct RECT
 
     public override string ToString()
     {
-        return string.Format(System.Globalization.CultureInfo.CurrentCulture, "{{Left={0},Top={1},Right={2},Bottom={3}}}", Left, Top, Right, Bottom);
+        return string.Format(CultureInfo.CurrentCulture, "{{Left={0},Top={1},Right={2},Bottom={3}}}", Left, Top, Right, Bottom);
     }
 }
 
 internal static class User32
 {
+    private const string Dll = "user32.dll";
+
+    internal static class Macros
+    {
+        public static uint MAKELCID(ushort lgid, uint srtid) => unchecked(((uint)(ushort)srtid << 16) | lgid);
+
+        public static int GET_X_LPARAM(IntPtr lp) => unchecked((short)(long)lp);
+        public static int GET_Y_LPARAM(IntPtr lp) => unchecked((short)((long)lp >> 16));
+
+        public static ushort HIWORD(IntPtr value) => unchecked((ushort)((long)value >> 16));
+        public static ushort HIWORD(UIntPtr value) => unchecked((ushort)((ulong)value >> 16));
+        public static ushort LOWORD(IntPtr value) => unchecked((ushort)(long)value);
+
+        public static byte LOBYTE(ushort value) => (byte)(value & 0xFF);
+        public static ushort HIBYTE(ushort value) => (ushort)((value >> 8) & 0xFF);
+
+        public static ushort GET_XBUTTON_WPARAM(IntPtr wParam) => HIWORD(wParam);
+        public static int GET_WHEEL_DELTA_WPARAM(IntPtr wParam) => (short)HIWORD(wParam);
+    }
+
     public const uint CP_ACP = 0;
     public const uint MB_PRECOMPOSED = 0x00000001;
 
@@ -848,94 +604,88 @@ internal static class User32
     public delegate IntPtr WndProcDelegate(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam);
     private static readonly WndProcDelegate s_WndProc = DefWindowProcW;
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr GetKeyboardLayout(uint idThread);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    public static extern uint GetLocaleInfoA(uint Locale, uint LCType, IntPtr lpLCData, int cchData);
-
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr CallWindowProc(IntPtr previousWindowProc, IntPtr windowHandle, WindowMessage message, IntPtr wParam, 
         IntPtr lParam);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport(Dll, SetLastError = true)]
     private static extern IntPtr CreateWindowExW(uint dwExStyle, IntPtr windowClass, [MarshalAs(UnmanagedType.LPWStr)] string lpWindowName,
         uint dwStyle, int x, int y, int nWidth, int nHeight, IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr pvParam);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DllImport(Dll, CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool DestroyWindow(IntPtr hwnd);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     static extern IntPtr DefWindowProcW(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr GetCapture();
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetCursorPos(out POINT point);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr GetDC(IntPtr hWnd);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr GetForegroundWindow();
 
-    [DllImport("user32.dll", SetLastError = false)]
+    [DllImport(Dll, SetLastError = false)]
     public static extern IntPtr GetMessageExtraInfo();
 
-    [DllImport("USER32.dll")]
+    [DllImport(Dll)]
     public static extern short GetKeyState(VirtualKey nVirtKey);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    public static extern IntPtr GetModuleHandle([MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
-
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport(Dll, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowUnicode(IntPtr hWnd);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport(Dll, SetLastError = true)]
     private static extern ushort RegisterClassExW([In] ref WNDCLASSEXW lpwcx);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern bool ReleaseCapture();
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern bool ReleaseDC(IntPtr hWnd, IntPtr hDC);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr SetCapture(IntPtr hWnd);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr SetCursor(IntPtr handle);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetCursorPos(int x, int y);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern bool SetProcessDPIAware();
 
-    [DllImport("user32.dll", EntryPoint = "SetWindowLong")]
+    [DllImport(Dll, EntryPoint = "SetWindowLong")]
     public static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
 
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
+    [DllImport(Dll, EntryPoint = "SetWindowLongPtr")]
     public static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 
     public static IntPtr SetWindowLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
@@ -945,28 +695,31 @@ internal static class User32
         return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
     }
 
-    [DllImport("user32.dll", CallingConvention = CallingConvention.Winapi)]
+    [DllImport(Dll, CallingConvention = CallingConvention.Winapi)]
     public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
 
-    [DllImport("user32.dll")]
+    [DllImport(Dll)]
     public static extern int TrackMouseEvent(ref TRACKMOUSEEVENT lpEventTrack);
 
     public static IntPtr CreateFakeWindow()
     {
-        var windowClass = new WNDCLASSEXW();
-        windowClass.cbSize = Marshal.SizeOf<WNDCLASSEXW>();
-        windowClass.lpfnWndProc = Marshal.GetFunctionPointerForDelegate(s_WndProc);
-        windowClass.hInstance = GetModuleHandle(null);
-        windowClass.lpszClassName = "DearImGuiInjectionWindowClass";
-
-        var registeredClass = RegisterClassExW(ref windowClass);
-        if (registeredClass == 0)
+        const string ClassName = "DearImGuiInjectionWindowClass";
+        const string WindowTitle = "DearImGuiInjection Window";
+        IntPtr hInstance = Kernel32.GetModuleHandle(null);
+        var wc = new WNDCLASSEXW
+        {
+            cbSize = Marshal.SizeOf<WNDCLASSEXW>(),
+            lpfnWndProc = Marshal.GetFunctionPointerForDelegate(s_WndProc),
+            hInstance = hInstance,
+            lpszClassName = ClassName
+        };
+        ushort atom = RegisterClassExW(ref wc);
+        if (atom == 0)
             throw new Win32Exception(Marshal.GetLastWin32Error());
-
-        var windowHandle = CreateWindowExW(0, new IntPtr(registeredClass), "DearImGuiInjection Window", 0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
-        if (windowHandle == IntPtr.Zero)
+        IntPtr hwnd = CreateWindowExW(0, new IntPtr(atom), WindowTitle, 0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
+        if (hwnd == IntPtr.Zero)
             throw new Win32Exception(Marshal.GetLastWin32Error());
-
-        return windowHandle;
+        return hwnd;
     }
+
 }

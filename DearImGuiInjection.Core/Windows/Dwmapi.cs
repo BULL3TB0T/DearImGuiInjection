@@ -5,12 +5,14 @@ namespace DearImGuiInjection.Windows;
 
 internal static class Dwmapi
 {
-    [DllImport("dwmapi.dll")]
+    private const string Dll = "dwmapi.dll";
+
+    [DllImport(Dll)]
     public static extern int DwmEnableBlurBehindWindow(IntPtr hwnd, ref DwmBlurBehind blurBehind);
 
-    [DllImport("dwmapi.dll")]
+    [DllImport(Dll)]
     public static extern int DwmGetColorizationColor(out uint colorizationColor, out bool colorizationOpaqueBlend);
 
-    [DllImport("dwmapi.dll")]
+    [DllImport(Dll)]
     public static extern int DwmIsCompositionEnabled(out bool enabled);
 }

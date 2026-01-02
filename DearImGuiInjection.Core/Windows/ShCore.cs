@@ -20,9 +20,11 @@ internal enum PROCESS_DPI_AWARENESS
 
 internal static class ShCore
 {
-    [DllImport("shcore.dll")]
+    private const string Dll = "shcore.dll";
+
+    [DllImport(Dll)]
     public static extern uint GetDpiForMonitor(IntPtr hmonitor, MONITOR_DPI_TYPE dpiType, out uint dpiX, out uint dpiY);
 
-    [DllImport("shcore.dll")]
+    [DllImport(Dll)]
     public static extern IntPtr SetProcessDpiAwareness(PROCESS_DPI_AWARENESS value);
 }

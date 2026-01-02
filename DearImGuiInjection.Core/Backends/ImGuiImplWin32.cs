@@ -78,8 +78,8 @@ internal static class ImGuiImplWin32
         // Retrieve keyboard code page, required for handling of non-Unicode Windows.
         Data bd = GetBackendData(io);
         IntPtr keyboard_layout = User32.GetKeyboardLayout(0);
-        uint keyboard_lcid = MAKELCID(HIWORD(keyboard_layout), User32.SORT_DEFAULT);
-        if (User32.GetLocaleInfoA(keyboard_lcid, User32.LOCALE_RETURN_NUMBER | User32.LOCALE_IDEFAULTANSICODEPAGE, (IntPtr)bd.KeyboardCodePage, sizeof(uint)) == 0)
+        uint keyboard_lcid = User32.Macros.MAKELCID(User32.Macros.HIWORD(keyboard_layout), User32.SORT_DEFAULT);
+        if (Kernel32.GetLocaleInfoA(keyboard_lcid, User32.LOCALE_RETURN_NUMBER | User32.LOCALE_IDEFAULTANSICODEPAGE, (IntPtr)bd.KeyboardCodePage, sizeof(uint)) == 0)
             bd.KeyboardCodePage = User32.CP_ACP; // Fallback to default ANSI code page when fails.
     }
 
@@ -355,10 +355,10 @@ internal static class ImGuiImplWin32
     {
         const int KF_EXTENDED = 0x0100;
         // There is no distinct VK_xxx for keypad enter, instead it is VK_RETURN + KF_EXTENDED.
-        if ((wParam == VirtualKey.VK_RETURN) && ((HIWORD(lParam) & KF_EXTENDED) != 0))
+        if ((wParam == VirtualKey.VK_RETURN) && ((User32.Macros.HIWORD(lParam) & KF_EXTENDED) != 0))
             return ImGuiKey.KeypadEnter;
 
-        int scancode = (int)LOBYTE(HIWORD(lParam));
+        int scancode = (int)User32.Macros.LOBYTE(User32.Macros.HIWORD(lParam));
         //Log.Debug(string.Format("scancode %3d, keycode = 0x%02X\n", scancode, wParam));
         switch (wParam)
         {
@@ -517,21 +517,6 @@ internal static class ImGuiImplWin32
         return ImGuiMouseSource.Mouse;
     }
 
-    private static uint MAKELCID(ushort lgid, uint srtid) => unchecked((uint)(((uint)(ushort)srtid << 16) | (uint)lgid));
-    private static int GET_X_LPARAM(IntPtr lp) => unchecked((short)(long)lp);
-    private static int GET_Y_LPARAM(IntPtr lp) => unchecked((short)((long)lp >> 16));
-
-    private static ushort HIWORD(IntPtr dwValue) => unchecked((ushort)((long)dwValue >> 16));
-    private static ushort HIWORD(UIntPtr dwValue) => unchecked((ushort)((ulong)dwValue >> 16));
-
-    private static ushort LOWORD(IntPtr dwValue) => unchecked((ushort)(long)dwValue);
-
-    private static ushort GET_XBUTTON_WPARAM(IntPtr wParam) => HIWORD(wParam);
-
-    private static int GET_WHEEL_DELTA_WPARAM(IntPtr wParam) => (short)HIWORD(wParam);
-
-    private static byte LOBYTE(ushort wValue) => (byte)(wValue & 0xff);
-
     // This version is in theory thread-safe in the sense that no path should access ImGui::GetCurrentContext().
     public unsafe static IntPtr WndProcHandler(IntPtr hwnd, WindowMessage msg, IntPtr wParam, IntPtr lParam, ImGuiIOPtr io)
     {
@@ -560,7 +545,7 @@ internal static class ImGuiImplWin32
                         User32.TrackMouseEvent(ref tme_track);
                         bd.MouseTrackedArea = area;
                     }
-                    POINT mouse_pos = new(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+                    POINT mouse_pos = new(User32.Macros.GET_X_LPARAM(lParam), User32.Macros.GET_Y_LPARAM(lParam));
                     if (msg == WindowMessage.WM_NCMOUSEMOVE && !User32.ScreenToClient(hwnd, ref mouse_pos)) // WM_NCMOUSEMOVE are provided in absolute coordinates.
                         break;
                     io.AddMouseSourceEvent(mouse_source);
@@ -604,7 +589,7 @@ internal static class ImGuiImplWin32
                     if (msg == WindowMessage.WM_LBUTTONDOWN || msg == WindowMessage.WM_LBUTTONDBLCLK) { button = 0; }
                     if (msg == WindowMessage.WM_RBUTTONDOWN || msg == WindowMessage.WM_RBUTTONDBLCLK) { button = 1; }
                     if (msg == WindowMessage.WM_MBUTTONDOWN || msg == WindowMessage.WM_MBUTTONDBLCLK) { button = 2; }
-                    if (msg == WindowMessage.WM_XBUTTONDOWN || msg == WindowMessage.WM_XBUTTONDBLCLK) { button = GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? 3 : 4; }
+                    if (msg == WindowMessage.WM_XBUTTONDOWN || msg == WindowMessage.WM_XBUTTONDBLCLK) { button = User32.Macros.GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? 3 : 4; }
                     IntPtr hwnd_with_capture = User32.GetCapture();
                     if (bd.MouseButtonsDown != 0 && hwnd_with_capture != hwnd) // Did we externally lost capture?
                         bd.MouseButtonsDown = 0;
@@ -625,7 +610,7 @@ internal static class ImGuiImplWin32
                     if (msg == WindowMessage.WM_LBUTTONUP) { button = 0; }
                     if (msg == WindowMessage.WM_RBUTTONUP) { button = 1; }
                     if (msg == WindowMessage.WM_MBUTTONUP) { button = 2; }
-                    if (msg == WindowMessage.WM_XBUTTONUP) { button = GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? 3 : 4; }
+                    if (msg == WindowMessage.WM_XBUTTONUP) { button = User32.Macros.GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? 3 : 4; }
                     bd.MouseButtonsDown &= ~(1 << button);
                     if (bd.MouseButtonsDown == 0 && User32.GetCapture() == hwnd)
                         User32.ReleaseCapture();
@@ -634,10 +619,10 @@ internal static class ImGuiImplWin32
                     return IntPtr.Zero;
                 }
             case WindowMessage.WM_MOUSEWHEEL:
-                io.AddMouseWheelEvent(0.0f, GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA);
+                io.AddMouseWheelEvent(0.0f, User32.Macros.GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA);
                 return IntPtr.Zero;
             case WindowMessage.WM_MOUSEHWHEEL:
-                io.AddMouseWheelEvent(-(float)GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA, 0.0f);
+                io.AddMouseWheelEvent(-(float)User32.Macros.GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA, 0.0f);
                 return IntPtr.Zero;
             case WindowMessage.WM_KEYDOWN:
             case WindowMessage.WM_KEYUP:
@@ -653,7 +638,7 @@ internal static class ImGuiImplWin32
                         // Obtain virtual key code
                         ImGuiKey key = KeyEventToImGuiKey((VirtualKey)wParam, lParam);
                         VirtualKey vk = (VirtualKey)wParam;
-                        int scancode = (int)LOBYTE(HIWORD(lParam));
+                        int scancode = (int)User32.Macros.LOBYTE(User32.Macros.HIWORD(lParam));
 
                         // Special behavior for VK_SNAPSHOT / ImGuiKey_PrintScreen as Windows doesn't emit the key down event.
                         if (key == ImGuiKey.PrintScreen && !is_key_down)
@@ -706,7 +691,7 @@ internal static class ImGuiImplWin32
                 return IntPtr.Zero;
             case WindowMessage.WM_SETCURSOR:
                 // This is required to restore cursor when transitioning from e.g resize borders to client area.
-                if (LOWORD(lParam) == HTCLIENT && UpdateMouseCursor(io, bd.LastMouseCursor))
+                if (User32.Macros.LOWORD(lParam) == HTCLIENT && UpdateMouseCursor(io, bd.LastMouseCursor))
                     return (IntPtr)1;
                 return IntPtr.Zero;
             case WindowMessage.WM_DEVICECHANGE:
@@ -750,10 +735,10 @@ internal static class ImGuiImplWin32
         return Ntdll.RtlVerifyVersionInfo(&versionInfo, VER_MASK.VER_MAJORVERSION | VER_MASK.VER_MINORVERSION, (long)conditionMask) == 0 ? true : false;
     }
 
-    private static bool _IsWindowsVistaOrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0600), LOBYTE(0x0600), 0); // _WIN32_WINNT_VISTA
-    private static bool _IsWindows8OrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0602), LOBYTE(0x0602), 0); // _WIN32_WINNT_WIN8
-    private static bool _IsWindows8Point1OrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0603), LOBYTE(0x0603), 0); // _WIN32_WINNT_WINBLUE
-    private static bool _IsWindows10OrGreater() => _IsWindowsVersionOrGreater((short)Kernel32.HiByte(0x0A00), LOBYTE(0x0A00), 0); // _WIN32_WINNT_WINTHRESHOLD / _WIN32_WINNT_WIN10
+    private static bool _IsWindowsVistaOrGreater() => _IsWindowsVersionOrGreater((short)User32.Macros.HIBYTE(0x0600), User32.Macros.LOBYTE(0x0600), 0); // _WIN32_WINNT_VISTA
+    private static bool _IsWindows8OrGreater() => _IsWindowsVersionOrGreater((short)User32.Macros.HIBYTE(0x0602), User32.Macros.LOBYTE(0x0602), 0); // _WIN32_WINNT_WIN8
+    private static bool _IsWindows8Point1OrGreater() => _IsWindowsVersionOrGreater((short)User32.Macros.HIBYTE(0x0603), User32.Macros.LOBYTE(0x0603), 0); // _WIN32_WINNT_WINBLUE
+    private static bool _IsWindows10OrGreater() => _IsWindowsVersionOrGreater((short)User32.Macros.HIBYTE(0x0A00), User32.Macros.LOBYTE(0x0A00), 0); // _WIN32_WINNT_WINTHRESHOLD / _WIN32_WINNT_WIN10
 
     private static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new IntPtr(-4);
 

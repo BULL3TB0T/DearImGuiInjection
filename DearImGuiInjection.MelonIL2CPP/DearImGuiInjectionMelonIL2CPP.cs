@@ -15,8 +15,6 @@ internal class DearImGuiInjectionMelonIL2CPP : MelonMod, ILoader
 {
     public LoaderKind Kind => LoaderKind.MelonIL2CPP;
 
-    public string GUID => DearImGuiInjectionMetadata.Author + "." + DearImGuiInjectionMetadata.Name;
-
     public string ConfigPath => MelonEnvironment.UserDataDirectory;
     public string AssemblyPath => Path.GetDirectoryName(MelonAssembly.Location);
 

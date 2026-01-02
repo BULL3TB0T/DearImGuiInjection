@@ -11,8 +11,6 @@ internal class DearImGuiInjectionBepInEx5 : BaseUnityPlugin, ILoader
 { 
     public LoaderKind Kind => LoaderKind.BepInEx5;
 
-    public string GUID => DearImGuiInjectionMetadata.GUID;
-
     public string ConfigPath => Paths.ConfigPath;
     public string AssemblyPath => Path.GetDirectoryName(base.Info.Location);
 
