@@ -8,8 +8,8 @@
     https://melonwiki.xyz/#/modders/quickstart?id=basic-mod-setup
     -->
     <MonoTargetFramework>net472</MonoTargetFramework>
-    <CoreUsesMonoTargetFramework>false</CoreUsesMonoTargetFramework>
     <!-- Set to true when building for Mono-based loaders. Using false with Mono loaders will cause runtime issues or freezes. -->
+    <CoreUsesMonoTargetFramework>false</CoreUsesMonoTargetFramework>
 
     <StartSteamGameAfterBuild>false</StartSteamGameAfterBuild>
     <SteamAppId>0</SteamAppId>
