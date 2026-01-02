@@ -12,7 +12,7 @@
     Use the Tools.TargetFrameworkDetector to detect the game's framework.
     -->
     <MonoTargetFramework>net472</MonoTargetFramework>
-    <!-- Set to true when building for Mono-based loaders. Using false with Mono loaders will cause runtime issues or freezes. -->
+    <!-- Set to true when building for Mono-based loaders. Using false with Mono loaders will cause freezes. -->
     <CoreUsesMonoTargetFramework>false</CoreUsesMonoTargetFramework>
 
     <StartSteamGameAfterBuild>false</StartSteamGameAfterBuild>
