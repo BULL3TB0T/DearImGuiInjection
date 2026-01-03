@@ -3,16 +3,22 @@
     <PackExclude Include="FASM" />
   </ItemGroup>
   <PropertyGroup>
-    <!-- Build twice to ensure all target outputs are copied to the pack directory. -->
+    <!--
+    Build twice so all target outputs get copied into PackDir.
+    Tip: UnityCrashHandler32/64 can hint at x86/x64, but is not always reliable.
+    -->
 
-    <!-- 
+    <!--
+    Refs:
     https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/2_plugin_start.html#initializing-a-plugin-project-from-template
     https://melonwiki.xyz/#/modders/quickstart?id=basic-mod-setup
-    Or
-    Use the Tools.TargetFrameworkDetector to detect the game's framework.
+    Or build and use Tools.TargetFrameworkDetector to detect the game's framework.
     -->
     <MonoTargetFramework>net472</MonoTargetFramework>
-    <!-- Set to true when building for Mono-based loaders. Using false with Mono loaders will cause freezes. -->
+    <!--
+    True when building a Mono loader (BepInEx5/6 Mono, Melon Mono).
+    If false, the loader and Core can mismatch TFMs and the game may freeze at startup.
+    -->
     <CoreUsesMonoTargetFramework>false</CoreUsesMonoTargetFramework>
 
     <StartSteamGameAfterBuild>false</StartSteamGameAfterBuild>
