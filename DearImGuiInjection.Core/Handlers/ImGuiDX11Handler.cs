@@ -52,13 +52,13 @@ internal sealed class ImGuiDX11Handler : ImGuiHandler
             DearImGuiInjectionCore.TextureManager = new DX11TextureManager(_device);
             IsInitialized = true;
         }
-        DearImGuiInjectionCore.TextureManager.Update();
         if (_renderTargetView == null)
         {
             using var backBuffer = swapChain.GetBackBuffer<Texture2D>(0);
             _renderTargetView = new RenderTargetView(_device, backBuffer);
         }
         _deviceContext.OutputMerger.SetRenderTargets(_renderTargetView);
+        DearImGuiInjectionCore.TextureManager.Update();
         DearImGuiInjectionCore.MultiContextCompositor.PreNewFrameUpdateAll();
         for (int i = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack.Count - 1; i >= 0; i--)
         {

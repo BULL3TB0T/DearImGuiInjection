@@ -54,7 +54,7 @@ internal class ImGuiDX11Renderer : ImGuiRenderer
         {
             return false;
         }
-        return hasD3D11 || !hasD3D12;
+        return hasD3D11 && !hasD3D12;
     }
 
     public override unsafe void Init()
