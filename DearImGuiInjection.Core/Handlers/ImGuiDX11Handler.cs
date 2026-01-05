@@ -57,9 +57,7 @@ internal sealed unsafe class ImGuiDX11Handler : ImGuiHandler
             Guid riid = ID3D11Device.Guid;
             swapChain->GetDevice(&riid, &device);
             _device = (ID3D11Device*)device;
-            ID3D11DeviceContext* deviceContext = null;
-            _device->GetImmediateContext(&deviceContext);
-            _deviceContext = deviceContext;
+            _device->GetImmediateContext(ref _deviceContext);
             SwapChainDesc desc;
             swapChain->GetDesc(&desc);
             Init(desc.OutputWindow);
