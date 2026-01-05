@@ -66,8 +66,8 @@ internal sealed unsafe class ImGuiDX11Handler : ImGuiHandler
         }
         if (_renderTargetView == null)
         {
-            Guid riid = ID3D11Texture2D.Guid;
             void* backBuffer = null;
+            Guid riid = ID3D11Texture2D.Guid;
             swapChain->GetBuffer(0, &riid, &backBuffer);
             ID3D11Texture2D* texture = (ID3D11Texture2D*)backBuffer;
             _device->CreateRenderTargetView((ID3D11Resource*)texture, null, ref _renderTargetView);
