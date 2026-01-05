@@ -1,5 +1,8 @@
 using Hexa.NET.ImGui;
-using SharpDX.WIC;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,17 +12,29 @@ using System.Linq;
 
 namespace DearImGuiInjection.Textures;
 
-internal abstract class TextureManager<TEntryData> : ITextureManager where TEntryData : struct
+internal abstract class TextureManager<TEntryData, TEntryFrameData> : ITextureManager
+    where TEntryData : struct, TextureManager<TEntryData, TEntryFrameData>.IEntryData
+    where TEntryFrameData : struct, TextureManager<TEntryData, TEntryFrameData>.IEntryFrameData
 {
-    private enum ChangeType
+    internal interface IEntryData
     {
-        AddOrUpdate,
-        Remove
+        public TEntryFrameData[] FrameDatas { get; set; }
+        public int FrameIndex { get; set; }
+        public float NextFrameInSeconds { get; set; }
+        public ITextureManager.TextureData CachedTextureData { get; set; }
+        public ITextureManager.TextureData.TextureFrameData[] CachedTextureFrameDatas { get; set; }
     }
 
-    internal struct DecodedFrame
+    internal interface IEntryFrameData
     {
-        public byte[] Rgba;
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public int DelayMs { get; set; }
+    }
+
+    internal unsafe struct DecodedFrame
+    {
+        public void* Data;
         public int Width;
         public int Height;
         public int DelayMs;
@@ -27,22 +42,25 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
 
     private string RootDirectory;
 
-    internal float NowSeconds;
-
-    private float _nextScanInSeconds;
-    private const float ScanIntervalSeconds = 0.5f;
-
-    private readonly Queue<(ChangeType Type, string FullPath)> _queue = new();
+    private readonly Queue<(string FullPath, bool ShouldRemove)> _queue = new();
     private readonly Dictionary<string, DateTime> _knownWriteTimesUtc = new(StringComparer.OrdinalIgnoreCase);
     internal readonly Dictionary<string, TEntryData> Entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, HashSet<string>> _registeredOwnerKeys = new();
     internal readonly Dictionary<string, TEntryData> RegisteredEntries = new();
 
+    private float NowSeconds;
+    private float _nextScanInSeconds;
+    private const float ScanIntervalSeconds = 0.5f;
+
     public TextureManager() => RootDirectory = Path.Combine(DearImGuiInjectionCore.AssetsPath, "Textures");
 
     public void Update()
     {
-        RecreateRootDirectory();
+        Directory.CreateDirectory(DearImGuiInjectionCore.AssetsPath);
+        Directory.CreateDirectory(RootDirectory);
+        string fullPath = Path.Combine(RootDirectory, "INSERT-TEXTURES-HERE");
+        if (!File.Exists(fullPath))
+            File.WriteAllBytes(fullPath, []);
         NowSeconds = Stopwatch.GetTimestamp() / (float)Stopwatch.Frequency;
         if (NowSeconds >= _nextScanInSeconds)
         {
@@ -70,29 +88,35 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
         while (_queue.Count > 0)
         {
             var item = _queue.Dequeue();
-            string fullPath = item.FullPath;
+            fullPath = item.FullPath;
             string key = MakeRelativeKey(fullPath);
-            if (item.Type == ChangeType.Remove)
+            if (item.ShouldRemove)
             {
-                RemoveEntry(key);
+                if (Entries.TryGetValue(key, out TEntryData queuedEntryData))
+                {
+                    Entries.Remove(key);
+                    DisposeEntryData(queuedEntryData);
+                }
                 continue;
             }
             if (!File.Exists(fullPath))
                 continue;
-            if (!TryDecodeFramesRgba32Wic(fullPath, out DecodedFrame[] frames))
+            if (!TryCreateDecodedFrames(fullPath, out DecodedFrame[] frames))
                 continue;
-            if (!TryCreateEntryData(fullPath, frames, out TEntryData entryData))
+            if (!TryCreateEntryDatas(frames, out TEntryData entryData))
                 continue;
-            ReplaceEntry(key, entryData);
+            Entries[key] = entryData;
         }
     }
 
     public bool TryGetTextureData(string relativePath, out ITextureManager.TextureData textureData)
     {
         textureData = default;
-        if (Entries.TryGetValue(NormalizeRelativeKey(relativePath), out TEntryData entryData))
+        string key = NormalizeRelativeKey(relativePath);
+        if (Entries.TryGetValue(key, out TEntryData entryData))
         {
-            textureData = GetTextureData(entryData);
+            textureData = GetTextureData(ref entryData);
+            Entries[key] = entryData;
             return true;
         }
         return false;
@@ -142,7 +166,8 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
             return false;
         if (RegisteredEntries.TryGetValue(key, out TEntryData entryData))
         {
-            textureData = GetTextureData(entryData);
+            textureData = GetTextureData(ref entryData);
+            RegisteredEntries[key] = entryData;
             return true;
         }
         return false;
@@ -160,92 +185,47 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
         RegisteredEntries.Clear();
     }
 
-    public abstract void UpdateEntryData(ref TEntryData entryData);
     public abstract void DisposeEntryData(TEntryData entryData);
 
-    public abstract bool TryCreateEntryData(string fullPath, DecodedFrame[] frames, out TEntryData entryData);
     public abstract bool TryCreateEntryData(IntPtr ptr, out TEntryData entryData);
+    public abstract bool TryCreateEntryDatas(DecodedFrame[] frames, out TEntryData entryData);
 
-    public abstract ITextureManager.TextureData GetTextureData(TEntryData entryData);
+    public abstract ITextureManager.TextureData GetTextureData(ref TEntryData entryData);
 
-    private static bool TryDecodeFramesRgba32Wic(string fullPath, out DecodedFrame[] frames)
+    private unsafe static bool TryCreateDecodedFrames(string fullPath, out DecodedFrame[] frames)
     {
         frames = null;
         try
         {
-            using var factory = new ImagingFactory2();
-            using var fs = new FileStream(
-                fullPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
-            using var wicStream = new WICStream(factory, fs);
-            using var decoder = new BitmapDecoder(factory, wicStream, DecodeOptions.CacheOnLoad);
-            int frameCount = decoder.FrameCount;
-            if (frameCount <= 0)
+            using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using Image<Rgba32> image = Image.Load<Rgba32>(fs, out IImageFormat format);
+            int frameCount = image.Frames.Count;
+            if (frameCount <= 0 || image.Width <= 0 || image.Height <= 0)
                 return false;
-            int canvasWidth = 0;
-            int canvasHeight = 0;
+            bool isGif = format is GifFormat;
+            DecodedFrame[] decodedFrames = new DecodedFrame[frameCount];
             for (int i = 0; i < frameCount; i++)
             {
-                using var frame = decoder.GetFrame(i);
-                int width = frame.Size.Width;
-                int height = frame.Size.Height;
-                if (width <= 0 || height <= 0)
-                    return false;
-                int left = ReadMetaInt(frame, "/imgdesc/Left", 0);
-                int top = ReadMetaInt(frame, "/imgdesc/Top", 0);
-                int right = left + width;
-                int bottom = top + height;
-                if (right > canvasWidth)
-                    canvasWidth = right;
-                if (bottom > canvasHeight)
-                    canvasHeight = bottom;
-            }
-            if (canvasWidth <= 0 || canvasHeight <= 0)
-                return false;
-            frames = new DecodedFrame[frameCount];
-            byte[] canvas = new byte[canvasWidth * canvasHeight * 4];
-            int prevLeft = 0;
-            int prevTop = 0;
-            int prevWidth = 0;
-            int prevHeight = 0;
-            int prevDisposal = 0;
-            for (int i = 0; i < frameCount; i++)
-            {
-                using var frame = decoder.GetFrame(i);
-                int width = frame.Size.Width;
-                int height = frame.Size.Height;
-                if (width <= 0 || height <= 0)
-                    return false;
-                int left = ReadMetaInt(frame, "/imgdesc/Left", 0);
-                int top = ReadMetaInt(frame, "/imgdesc/Top", 0);
-                int disposal = ReadMetaInt(frame, "/grctlext/Disposal", 0);
+                ImageFrame<Rgba32> frame = image.Frames[i];
                 int delayMs = 0;
-                if (frameCount > 1)
-                    delayMs = TryReadGifDelayMs(frame);
-                if (i > 0 && prevDisposal == 2)
-                    ClearRect(canvas, canvasWidth, canvasHeight, prevLeft, prevTop, prevWidth, prevHeight);
-                using var converter = new FormatConverter(factory);
-                converter.Initialize(frame, PixelFormat.Format32bppRGBA);
-                byte[] patch = new byte[width * height * 4];
-                converter.CopyPixels(patch, width * 4);
-                BlitRgbaAlpha(patch, width, height, canvas, canvasWidth, canvasHeight, left, top);
-                byte[] outRgba = new byte[canvas.Length];
-                Buffer.BlockCopy(canvas, 0, outRgba, 0, canvas.Length);
-                frames[i] = new DecodedFrame
+                if (isGif)
                 {
-                    Rgba = outRgba,
-                    Width = canvasWidth,
-                    Height = canvasHeight,
-                    DelayMs = delayMs
-                };
-                prevLeft = left;
-                prevTop = top;
-                prevWidth = width;
-                prevHeight = height;
-                prevDisposal = disposal;
+                    GifFrameMetadata gif = frame.Metadata.GetGifMetadata();
+                    int delayCs = gif.FrameDelay;
+                    delayMs = delayCs * 10;
+                }
+                byte[] _data = new byte[frame.Width * frame.Height * 4];
+                frame.CopyPixelDataTo(_data);
+                fixed (void* data = _data)
+                    decodedFrames[i] = new DecodedFrame
+                    {
+                        Data = data,
+                        Width = frame.Width,
+                        Height = frame.Height,
+                        DelayMs = delayMs
+                    };
             }
+            frames = decodedFrames;
             return true;
         }
         catch
@@ -255,135 +235,48 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
         }
     }
 
-    private static int ReadMetaInt(BitmapFrameDecode frame, string name, int fallback)
+    private void UpdateEntryData(ref TEntryData entryData)
     {
-        try
+        void SyncCachedEntryData(ref TEntryData entryData)
         {
-            var reader = frame.MetadataQueryReader;
-            if (reader == null)
-                return fallback;
-            object value = reader.GetMetadataByName(name);
-            return value switch
-            {
-                byte b => b,
-                sbyte sb => sb,
-                short s => s,
-                ushort us => us,
-                int i => i,
-                uint ui => (int)ui,
-                _ => fallback
-            };
+            ITextureManager.TextureData cached = entryData.CachedTextureData;
+            cached.FrameIndex = entryData.FrameIndex;
+            cached.NextFrameInSeconds = entryData.NextFrameInSeconds;
+            entryData.CachedTextureData = cached;
         }
-        catch
+        TEntryFrameData[] frames = entryData.FrameDatas;
+        int frameCount = frames.Length;
+        if (frameCount == 1)
         {
-            return fallback;
-        }
-    }
-
-    private static int TryReadGifDelayMs(BitmapFrameDecode frame)
-    {
-        try
-        {
-            var reader = frame.MetadataQueryReader;
-            if (reader == null)
-                return 100;
-            object delayObj = reader.GetMetadataByName("/grctlext/Delay");
-            int delayCs = 0;
-            if (delayObj is ushort u16)
-                delayCs = u16;
-            else if (delayObj is short s16)
-                delayCs = s16;
-            else if (delayObj is uint u32)
-                delayCs = (int)u32;
-            else if (delayObj is int i32)
-                delayCs = i32;
-            int ms = delayCs * 10;
-            if (ms <= 0)
-                ms = 100;
-            return ms;
-        }
-        catch
-        {
-            return 100;
-        }
-    }
-
-    private static void ClearRect(byte[] canvas, int canvasW, int canvasH, int x, int y, int w, int h)
-    {
-        if (w <= 0 || h <= 0)
+            entryData.FrameIndex = 0;
+            entryData.NextFrameInSeconds = 0;
+            SyncCachedEntryData(ref entryData);
             return;
-        if (x < 0)
-        {
-            w += x;
-            x = 0;
         }
-        if (y < 0)
+        if (entryData.NextFrameInSeconds <= 0f)
         {
-            h += y;
-            y = 0;
-        }
-        if (x >= canvasW || y >= canvasH)
+            int firstDelayMs = frames[0].DelayMs;
+            if (firstDelayMs <= 0)
+                firstDelayMs = 100;
+            entryData.FrameIndex = 0;
+            entryData.NextFrameInSeconds = NowSeconds + (firstDelayMs / 1000f);
+            SyncCachedEntryData(ref entryData);
             return;
-        int maxW = canvasW - x;
-        int maxH = canvasH - y;
-        if (w > maxW)
-            w = maxW;
-        if (h > maxH)
-            h = maxH;
-        for (int yy = 0; yy < h; yy++)
-        {
-            int row = ((y + yy) * canvasW + x) * 4;
-            Array.Clear(canvas, row, w * 4);
         }
-    }
-
-    private static void BlitRgbaAlpha(byte[] src, int srcW, int srcH, byte[] dst, int dstW, int dstH, int dstX, int dstY)
-    {
-        for (int y = 0; y < srcH; y++)
+        if (NowSeconds < entryData.NextFrameInSeconds)
         {
-            int dstY2 = dstY + y;
-            if ((uint)dstY2 >= (uint)dstH)
-                continue;
-            int srcRow = y * srcW * 4;
-            for (int x = 0; x < srcW; x++)
-            {
-                int dstX2 = dstX + x;
-                if ((uint)dstX2 >= (uint)dstW)
-                    continue;
-                int srcIndex = srcRow + x * 4;
-                byte alpha = src[srcIndex + 3];
-                if (alpha == 0)
-                    continue;
-                int dstIndex = (dstY2 * dstW + dstX2) * 4;
-                dst[dstIndex + 0] = src[srcIndex + 0];
-                dst[dstIndex + 1] = src[srcIndex + 1];
-                dst[dstIndex + 2] = src[srcIndex + 2];
-                dst[dstIndex + 3] = alpha;
-            }
+            SyncCachedEntryData(ref entryData);
+            return;
         }
-    }
-
-    private static string NormalizeRelativeKey(string relativePath)
-    {
-        if (relativePath == null)
-            return string.Empty;
-        relativePath = relativePath.Replace('\\', '/').TrimStart('/');
-        return relativePath;
-    }
-
-    private void ReplaceEntry(string key, TEntryData entryData)
-    {
-        RemoveEntry(key);
-        Entries[key] = entryData;
-    }
-
-    private void RemoveEntry(string key)
-    {
-        if (Entries.TryGetValue(key, out TEntryData entryData))
-        {
-            Entries.Remove(key);
-            DisposeEntryData(entryData);
-        }
+        int nextIndex = entryData.FrameIndex + 1;
+        if (nextIndex >= frameCount)
+            nextIndex = 0;
+        entryData.FrameIndex = nextIndex;
+        int delayMs = frames[nextIndex].DelayMs;
+        if (delayMs <= 0)
+            delayMs = 100;
+        entryData.NextFrameInSeconds = NowSeconds + (delayMs / 1000f);
+        SyncCachedEntryData(ref entryData);
     }
 
     private void ScanForChanges()
@@ -392,7 +285,7 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
         {
             _knownWriteTimesUtc.Clear();
             foreach (var pair in Entries.ToArray())
-                _queue.Enqueue((ChangeType.Remove, Path.Combine(RootDirectory, pair.Key)));
+                _queue.Enqueue((Path.Combine(RootDirectory, pair.Key), true));
             Entries.Clear();
             return;
         }
@@ -405,11 +298,11 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
                 if (writeTimeUtc <= knownUtc)
                     continue;
                 _knownWriteTimesUtc[fullPath] = writeTimeUtc;
-                _queue.Enqueue((ChangeType.AddOrUpdate, fullPath));
+                _queue.Enqueue((fullPath, false));
                 continue;
             }
             _knownWriteTimesUtc[fullPath] = writeTimeUtc;
-            _queue.Enqueue((ChangeType.AddOrUpdate, fullPath));
+            _queue.Enqueue((fullPath, false));
         }
         if (_knownWriteTimesUtc.Count == 0)
             return;
@@ -420,14 +313,8 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
             if (File.Exists(fullPath))
                 continue;
             _knownWriteTimesUtc.Remove(fullPath);
-            _queue.Enqueue((ChangeType.Remove, fullPath));
+            _queue.Enqueue((fullPath, true));
         }
-    }
-
-    private void TryRememberWriteTime(string fullPath)
-    {
-        if (TryGetWriteTimeUtc(fullPath, out DateTime writeTimeUtc))
-            _knownWriteTimesUtc[fullPath] = writeTimeUtc;
     }
 
     private static bool TryGetWriteTimeUtc(string fullPath, out DateTime writeTimeUtc)
@@ -444,13 +331,21 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
         }
     }
 
+    private string NormalizeRelativeKey(string relativePath)
+    {
+        if (relativePath == null)
+            return string.Empty;
+        relativePath = relativePath.Replace('\\', '/').TrimStart('/');
+        return relativePath;
+    }
+
     private string MakeRelativeKey(string fullPath)
     {
         string rel = GetRelativePathCompat(RootDirectory, fullPath);
         return NormalizeRelativeKey(rel);
     }
 
-    private static string GetRelativePathCompat(string baseDir, string fullPath)
+    private string GetRelativePathCompat(string baseDir, string fullPath)
     {
         baseDir = EnsureTrailingSeparator(Path.GetFullPath(baseDir));
         fullPath = Path.GetFullPath(fullPath);
@@ -460,7 +355,7 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
         return rel.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
     }
 
-    private static string EnsureTrailingSeparator(string path)
+    private string EnsureTrailingSeparator(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
             return path;
@@ -468,14 +363,5 @@ internal abstract class TextureManager<TEntryData> : ITextureManager where TEntr
         if (last != Path.DirectorySeparatorChar && last != Path.AltDirectorySeparatorChar)
             return path + Path.DirectorySeparatorChar;
         return path;
-    }
-
-    private void RecreateRootDirectory()
-    {
-        Directory.CreateDirectory(DearImGuiInjectionCore.AssetsPath);
-        Directory.CreateDirectory(RootDirectory);
-        string fullPath = Path.Combine(RootDirectory, "INSERT-TEXTURES-HERE");
-        if (!File.Exists(fullPath))
-            File.WriteAllBytes(fullPath, []);
     }
 }

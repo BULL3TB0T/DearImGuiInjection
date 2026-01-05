@@ -1,15 +1,13 @@
 ﻿using DearImGuiInjection.Handlers;
 using DearImGuiInjection.Windows;
-using SharpDX.Direct3D;
-using SharpDX.Direct3D11;
-using SharpDX.DXGI;
+using Silk.NET.Core.Native;
+using Silk.NET.Direct3D11;
+using Silk.NET.DXGI;
 using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-
-using Device = SharpDX.Direct3D11.Device;
 
 namespace DearImGuiInjection.Renderers;
 
@@ -26,8 +24,6 @@ internal class ImGuiDX11Renderer : ImGuiRenderer
     private IntPtr _resizeBuffersTarget;
     private ResizeBuffersDelegate _resizeBuffersDetour;
     private ResizeBuffersDelegate _resizeBuffersOriginal;
-
-    private bool _hooksCreated;
 
     public override RendererKind Kind => RendererKind.DX11;
 
@@ -60,71 +56,97 @@ internal class ImGuiDX11Renderer : ImGuiRenderer
     public override unsafe void Init()
     {
         var windowHandle = User32.CreateFakeWindow();
-        var description = new SwapChainDescription()
+        SwapChainDesc desc = new()
         {
-            ModeDescription = new ModeDescription(0, 0, new Rational(0, 0), Format.R8G8B8A8_UNorm),
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = Usage.RenderTargetOutput,
+            BufferDesc = new ModeDesc
+            {
+                Width = 0,
+                Height = 0,
+                RefreshRate = new Rational(0, 0),
+                Format = Format.FormatR8G8B8A8Unorm
+            },
+            SampleDesc = new SampleDesc(1),
+            BufferUsage = DXGI.UsageRenderTargetOutput,
             BufferCount = 1,
-            OutputHandle = windowHandle,
-            IsWindowed = true,
+            OutputWindow = windowHandle,
+            Windowed = true,
             SwapEffect = SwapEffect.Discard
         };
-        Device.CreateWithSwapChain(DriverType.Hardware, DeviceCreationFlags.None, description, out var device, out var swapChain);
-        nint* vTable = *(nint**)swapChain.NativePointer;
-        _presentTarget = vTable[8];
-        _resizeBuffersTarget = vTable[13];
-        device.Dispose();
-        swapChain.Dispose();
+        ID3D11Device* device = null;
+        ID3D11DeviceContext* deviceContext = null;
+        IDXGISwapChain* swapChain = null;
+        int hr = D3D11.GetApi(null).CreateDeviceAndSwapChain(
+            pAdapter: null,
+            DriverType: D3DDriverType.Hardware,
+            Software: 0,
+            Flags: 0,
+            pFeatureLevels: null,
+            FeatureLevels: 0,
+            SDKVersion: D3D11.SdkVersion,
+            pSwapChainDesc: &desc,
+            ppSwapChain: &swapChain,
+            ppDevice: &device,
+            pFeatureLevel: null,
+            ppImmediateContext: &deviceContext);
+        if (hr < 0)
+        {
+            if (deviceContext != null)
+                deviceContext->Release();
+            if (device != null)
+                device->Release();
+            if (swapChain != null)
+                swapChain->Release();
+            throw new InvalidOperationException($"CreateDeviceAndSwapChain failed: 0x{hr:X8}");
+        }
+        nint* vTable = (nint*)swapChain->LpVtbl;
+        IntPtr presentTarget = vTable[8];
+        IntPtr resizeBuffersTarget = vTable[13];
+        deviceContext->Release();
+        device->Release();
+        swapChain->Release();
         User32.DestroyWindow(windowHandle);
         Handler = new ImGuiDX11Handler();
         MinHook.OK(MinHook.Initialize(), "MH_Initialize");
         _presentDetour = PresentHook;
         IntPtr presentDetourPtr = Marshal.GetFunctionPointerForDelegate(_presentDetour);
-        MinHook.OK(MinHook.CreateHook(_presentTarget, presentDetourPtr, out IntPtr presentOriginalPtr),
+        MinHook.OK(MinHook.CreateHook(presentTarget, presentDetourPtr, out IntPtr presentOriginal),
             "MH_CreateHook(Present)");
-        MinHook.OK(MinHook.EnableHook(_presentTarget), "MH_EnableHook(Present)");
-        _presentOriginal = Marshal.GetDelegateForFunctionPointer<PresentDelegate>(presentOriginalPtr);
+        MinHook.OK(MinHook.EnableHook(presentTarget), "MH_EnableHook(Present)");
+        _presentOriginal = Marshal.GetDelegateForFunctionPointer<PresentDelegate>(presentOriginal);
+        _presentTarget = presentTarget;
         _resizeBuffersDetour = ResizeBuffersHook;
         IntPtr resizeBuffersDetourPtr = Marshal.GetFunctionPointerForDelegate(_resizeBuffersDetour);
-        MinHook.OK(MinHook.CreateHook(_resizeBuffersTarget, resizeBuffersDetourPtr, out IntPtr resizeBuffersOriginalPtr),
+        MinHook.OK(MinHook.CreateHook(resizeBuffersTarget, resizeBuffersDetourPtr, out IntPtr resizeBuffersOriginal),
             "MH_CreateHook(ResizeBuffers)");
-        MinHook.OK(MinHook.EnableHook(_resizeBuffersTarget), "MH_EnableHook(ResizeBuffers)");
-        _resizeBuffersOriginal = Marshal.GetDelegateForFunctionPointer<ResizeBuffersDelegate>(resizeBuffersOriginalPtr);
+        MinHook.OK(MinHook.EnableHook(resizeBuffersTarget), "MH_EnableHook(ResizeBuffers)");
+        _resizeBuffersOriginal = Marshal.GetDelegateForFunctionPointer<ResizeBuffersDelegate>(resizeBuffersOriginal);
+        _resizeBuffersTarget = resizeBuffersTarget;
     }
 
     public override void Dispose()
     {
-        if (_hooksCreated)
+        if (_resizeBuffersTarget != IntPtr.Zero)
         {
-            if (_resizeBuffersTarget != IntPtr.Zero)
-            {
-                MinHook.DisableHook(_resizeBuffersTarget);
-                MinHook.RemoveHook(_resizeBuffersTarget);
-            }
-            if (_presentTarget != IntPtr.Zero)
-            {
-                MinHook.DisableHook(_presentTarget);
-                MinHook.RemoveHook(_presentTarget);
-            }
-            _hooksCreated = false;
+            MinHook.DisableHook(_resizeBuffersTarget);
+            MinHook.RemoveHook(_resizeBuffersTarget);
+        }
+        if (_presentTarget != IntPtr.Zero)
+        {
+            MinHook.DisableHook(_presentTarget);
+            MinHook.RemoveHook(_presentTarget);
         }
         Handler?.Dispose();
     }
 
     private int PresentHook(IntPtr self, uint syncInterval, uint flags)
     {
-        using var swapChain = new SwapChain(self);
-        ((ImGuiDX11Handler)Handler).OnPresent(swapChain, syncInterval, flags);
+        ((ImGuiDX11Handler)Handler).OnPresent(self, syncInterval, flags);
         return _presentOriginal(self, syncInterval, flags);
     }
 
     private int ResizeBuffersHook(IntPtr self, uint bufferCount, uint width, uint height, Format newFormat, uint swapChainFlags)
     {
-        using var swapChain = new SwapChain(self);
-        ((ImGuiDX11Handler)Handler).OnPreResizeBuffers(swapChain, bufferCount, width, height, newFormat, swapChainFlags);
-        int result = _resizeBuffersOriginal(self, bufferCount, width, height, newFormat, swapChainFlags);
-        ((ImGuiDX11Handler)Handler).OnPostResizeBuffers(swapChain, bufferCount, width, height, newFormat, swapChainFlags);
-        return result;
+        ((ImGuiDX11Handler)Handler).OnResizeBuffers(self, bufferCount, width, height, newFormat, swapChainFlags);
+        return _resizeBuffersOriginal(self, bufferCount, width, height, newFormat, swapChainFlags);
     }
 }

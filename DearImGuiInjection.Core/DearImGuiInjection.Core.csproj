@@ -26,11 +26,11 @@
     <!-- 
     <PackageReference Include="Hexa.NET.ImGui" Version="2.2.10-*" />
     -->
-    <PackageReference Include="SharpDX" Version="4.2.0" />
-    <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
-    <PackageReference Include="SharpDX.Direct2D1" Version="4.2.0" />
-    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
-    <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
+    <PackageReference Include="Silk.NET.Core" Version="2.22.0" />
+    <PackageReference Include="Silk.NET.Direct3D.Compilers" Version="2.22.0" />
+    <PackageReference Include="Silk.NET.Direct3D11" Version="2.22.0" />
+    <PackageReference Include="Silk.NET.DXGI" Version="2.22.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
 
     <Reference Include="Hexa.NET.ImGui">

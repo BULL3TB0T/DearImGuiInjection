@@ -1,88 +1,99 @@
 ﻿using Hexa.NET.ImGui;
-using SharpDX;
-using SharpDX.Direct3D11;
-using SharpDX.DXGI;
-using SharpDX.WIC;
+using Silk.NET.Core.Native;
+using Silk.NET.Direct3D11;
+using Silk.NET.DXGI;
 using System;
 using System.Runtime.InteropServices;
 
-using Device = SharpDX.Direct3D11.Device;
-
 namespace DearImGuiInjection.Textures;
 
-internal sealed class DX11TextureManager : TextureManager<DX11TextureManager.EntryData>
+internal sealed unsafe class DX11TextureManager : TextureManager<DX11TextureManager.EntryData, DX11TextureManager.EntryFrameData>
 {
-    public struct EntryData
+    internal struct EntryData : IEntryData
     {
-        public struct FrameData
-        {
-            public Texture2D Tex;
-            public ShaderResourceView Srv;
-            public int Width;
-            public int Height;
-            public int DelayMs;
-        }
-        public FrameData[] FrameDatas;
-        public int FrameIndex;
-        public float NextFrameInSeconds;
-        internal ITextureManager.TextureData CachedTextureData;
-        internal ITextureManager.TextureData.TextureFrameData[] CachedFrameDatas;
+        public EntryFrameData[] FrameDatas { get; set; }
+        public int FrameIndex { get; set; }
+        public float NextFrameInSeconds { get; set; }
+        public ITextureManager.TextureData CachedTextureData { get; set; }
+        public ITextureManager.TextureData.TextureFrameData[] CachedTextureFrameDatas { get; set; }
     }
 
-    private Device _device;
-
-    public DX11TextureManager(Device device) => _device = device;
-
-    public override void UpdateEntryData(ref EntryData entryData)
+    internal struct EntryFrameData : IEntryFrameData
     {
-        float nowSeconds = NowSeconds;
-        int frameCount = entryData.FrameDatas.Length;
-        if (entryData.NextFrameInSeconds <= 0)
-        {
-            int firstDelayMs = entryData.FrameDatas[0].DelayMs;
-            if (frameCount > 1 && firstDelayMs <= 0)
-                firstDelayMs = 100;
-            entryData.FrameIndex = 0;
-            entryData.NextFrameInSeconds = nowSeconds + (firstDelayMs / 1000.0f);
-            return;
-        }
-        if (nowSeconds < entryData.NextFrameInSeconds)
-            return;
-        int nextIndex = entryData.FrameIndex + 1;
-        if (nextIndex >= frameCount)
-            nextIndex = 0;
-        entryData.FrameIndex = nextIndex;
-        int delayMs = entryData.FrameDatas[nextIndex].DelayMs;
-        if (frameCount > 1 && delayMs <= 0)
-            delayMs = 100;
-        entryData.NextFrameInSeconds = nowSeconds + (delayMs / 1000.0f);
+        public ID3D11ShaderResourceView* Srv;
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public int DelayMs { get; set; }
     }
+
+    private readonly ID3D11Device* _device;
+
+    public DX11TextureManager(ID3D11Device* device) => _device = device;
 
     public override void DisposeEntryData(EntryData entryData)
     {
-        for (int i = 0; i < entryData.FrameDatas.Length; i++)
+        EntryFrameData[] frames = entryData.FrameDatas;
+        for (int i = 0; i < frames.Length; i++)
         {
-            var frame = entryData.FrameDatas[i];
-            frame.Tex?.Dispose();
-            frame.Srv?.Dispose();
+            EntryFrameData frameData = frames[i];
+            if (frameData.Srv != null)
+                frameData.Srv->Release();
         }
     }
 
-    public override bool TryCreateEntryData(string fullPath, DecodedFrame[] frames, out EntryData entry)
+    public override bool TryCreateEntryData(IntPtr ptr, out EntryData entry)
     {
         entry = default;
-        var entryFrames = new EntryData.FrameData[frames.Length];
+        ID3D11Texture2D* texture = (ID3D11Texture2D*)ptr;
+        if (texture == null)
+            return false;
+        Texture2DDesc desc;
+        texture->GetDesc(&desc);
+        ShaderResourceViewDesc srvDesc = default;
+        srvDesc.Format = Format.FormatR8G8B8A8Unorm;
+        srvDesc.ViewDimension = D3DSrvDimension.D3D11SrvDimensionTexture2D;
+        srvDesc.Texture2D = new Tex2DSrv
+        {
+            MipLevels = desc.MipLevels,
+            MostDetailedMip = 0
+        };
+        ID3D11ShaderResourceView* srv = null;
+        if (_device->CreateShaderResourceView((ID3D11Resource*)texture, &srvDesc, &srv) < 0)
+        {
+            texture->Release();
+            return false;
+        }
+        texture->Release();
+        entry = new EntryData
+        {
+            FrameDatas = new[]
+            {
+                new EntryFrameData
+                {
+                    Srv = srv,
+                    Width = (int)desc.Width,
+                    Height = (int)desc.Height
+                }
+            }
+        };
+        return true;
+    }
+
+    public override bool TryCreateEntryDatas(DecodedFrame[] frames, out EntryData entry)
+    {
+        entry = default;
+        var entryFrames = new EntryFrameData[frames.Length];
         try
         {
             for (int i = 0; i < frames.Length; i++)
             {
                 var decodedFrame = frames[i];
-                if (!TryCreateTexture(decodedFrame.Rgba, decodedFrame.Width, decodedFrame.Height, out var texture, out var shaderResourceView))
-                    throw new Exception("Failed to create DX11 texture for a GIF frame.");
-                entryFrames[i] = new EntryData.FrameData
+                if (!TryCreateTexture(decodedFrame.Data, decodedFrame.Width, decodedFrame.Height, 
+                    out ID3D11ShaderResourceView* srv))
+                    throw new Exception("Failed to create texture.");
+                entryFrames[i] = new EntryFrameData
                 {
-                    Tex = texture,
-                    Srv = shaderResourceView,
+                    Srv = srv,
                     Width = decodedFrame.Width,
                     Height = decodedFrame.Height,
                     DelayMs = decodedFrame.DelayMs
@@ -98,60 +109,27 @@ internal sealed class DX11TextureManager : TextureManager<DX11TextureManager.Ent
         {
             for (int i = 0; i < entryFrames.Length; i++)
             {
-                entryFrames[i].Tex?.Dispose();
-                entryFrames[i].Srv?.Dispose();
+                if (entryFrames[i].Srv != null)
+                    entryFrames[i].Srv->Release();
             }
             return false;
         }
     }
 
-    public override bool TryCreateEntryData(IntPtr ptr, out EntryData entry)
+    public override ITextureManager.TextureData GetTextureData(ref EntryData entryData)
     {
-        entry = default;
-        Texture2D texture = null;
-        ShaderResourceView shaderResourceView = null;
-        try
-        {
-            texture = new Texture2D(ptr);
-            shaderResourceView = new ShaderResourceView(_device, texture);
-            var description = texture.Description;
-            entry = new EntryData
-            {
-                FrameDatas = new[]
-                {
-                    new EntryData.FrameData()
-                    {
-                        Tex = texture,
-                        Srv = shaderResourceView,
-                        Width = description.Width,
-                        Height = description.Height
-                    }
-                }
-            };
-            return true;
-        }
-        catch
-        {
-            texture?.Dispose();
-            shaderResourceView?.Dispose();
-            return false;
-        }
-    }
-
-    public override ITextureManager.TextureData GetTextureData(EntryData entryData)
-    {
-        if (entryData.CachedFrameDatas == null)
+        if (entryData.CachedTextureFrameDatas == null)
         {
             int frameCount = entryData.FrameDatas.Length;
-            entryData.CachedFrameDatas = new ITextureManager.TextureData.TextureFrameData[frameCount];
+            entryData.CachedTextureFrameDatas = new ITextureManager.TextureData.TextureFrameData[frameCount];
             for (int i = 0; i < frameCount; i++)
             {
-                EntryData.FrameData frameData = entryData.FrameDatas[i];
-                entryData.CachedFrameDatas[i] = new ITextureManager.TextureData.TextureFrameData
+                EntryFrameData frameData = entryData.FrameDatas[i];
+                entryData.CachedTextureFrameDatas[i] = new ITextureManager.TextureData.TextureFrameData
                 {
                     TextureRef = new ImTextureRef
                     {
-                        TexID = frameData.Srv.NativePointer
+                        TexID = frameData.Srv
                     },
                     Width = frameData.Width,
                     Height = frameData.Height,
@@ -160,56 +138,55 @@ internal sealed class DX11TextureManager : TextureManager<DX11TextureManager.Ent
             }
             entryData.CachedTextureData = new ITextureManager.TextureData
             {
-                Frames = entryData.CachedFrameDatas
+                Frames = entryData.CachedTextureFrameDatas
             };
         }
-        entryData.CachedTextureData.FrameIndex = entryData.FrameIndex;
-        entryData.CachedTextureData.NextFrameInSeconds = entryData.NextFrameInSeconds;
         return entryData.CachedTextureData;
     }
 
-    private bool TryCreateTexture(byte[] rgba, int width, int height, out Texture2D texture, 
-        out ShaderResourceView shaderResourceView)
+    private bool TryCreateTexture(void* image_data, int width, int height, out ID3D11ShaderResourceView* srv)
     {
-        texture = null;
-        shaderResourceView = null;
-        if (rgba == null || rgba.Length == 0 || width <= 0 || height <= 0)
-            return false;
-        var description = new Texture2DDescription
+        srv = null;
+        Texture2DDesc desc = new()
         {
-            Width = width,
-            Height = height,
+            Width = (uint)width,
+            Height = (uint)height,
             MipLevels = 1,
             ArraySize = 1,
-            Format = Format.R8G8B8A8_UNorm,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.ShaderResource,
-            CpuAccessFlags = CpuAccessFlags.None,
-            OptionFlags = ResourceOptionFlags.None
+            Format = Format.FormatR8G8B8A8Unorm,
+            SampleDesc = new SampleDesc(1),
+            Usage = Usage.Default,
+            BindFlags = (uint)BindFlag.ShaderResource,
+            CPUAccessFlags = 0,
+            MiscFlags = 0
         };
-        IntPtr dataPtr = IntPtr.Zero;
-        try
+        SubresourceData subResource = new()
         {
-            dataPtr = Marshal.AllocHGlobal(rgba.Length);
-            Marshal.Copy(rgba, 0, dataPtr, rgba.Length);
-            var rect = new DataRectangle(dataPtr, width * 4);
-            texture = new Texture2D(_device, description, rect);
-            shaderResourceView = new ShaderResourceView(_device, texture);
-            return true;
-        }
-        catch
+            PSysMem = image_data,
+            SysMemPitch = (uint)width * 4,
+            SysMemSlicePitch = 0
+        };
+        ID3D11Texture2D* texture = null;
+        if (_device->CreateTexture2D(&desc, &subResource, &texture) < 0)
+            return false;
+        ShaderResourceViewDesc srvDesc = new()
         {
-            texture?.Dispose();
-            texture = null;
-            shaderResourceView?.Dispose();
-            shaderResourceView = null;
+            Format = Format.FormatR8G8B8A8Unorm,
+            ViewDimension = D3DSrvDimension.D3D11SrvDimensionTexture2D,
+            Texture2D = new Tex2DSrv
+            {
+                MipLevels = desc.MipLevels,
+                MostDetailedMip = 0
+            }
+        };
+        ID3D11ShaderResourceView* out_srv = null;
+        if (_device->CreateShaderResourceView((ID3D11Resource*)texture, &srvDesc, &out_srv) < 0)
+        {
+            texture->Release();
             return false;
         }
-        finally
-        {
-            if (dataPtr != IntPtr.Zero)
-                Marshal.FreeHGlobal(dataPtr);
-        }
+        texture->Release();
+        srv = out_srv;
+        return true;
     }
 }

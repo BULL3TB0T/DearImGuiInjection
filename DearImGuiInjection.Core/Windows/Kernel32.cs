@@ -30,7 +30,7 @@ internal static class Kernel32
     public static extern uint GetLocaleInfoA(uint Locale, uint LCType, IntPtr lpLCData, int cchData);
 
     [DllImport(Dll, SetLastError = true)]
-    public static unsafe extern int MultiByteToWideChar(
+    public unsafe static extern int MultiByteToWideChar(
         uint codePage,
         uint dwFlags,
         byte* lpMultiByteStr,

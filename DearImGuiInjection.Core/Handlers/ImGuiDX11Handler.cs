@@ -3,22 +3,19 @@ using DearImGuiInjection.Renderers;
 using DearImGuiInjection.Textures;
 using DearImGuiInjection.Windows;
 using Hexa.NET.ImGui;
-using SharpDX.Direct3D11;
-using SharpDX.DXGI;
+using Silk.NET.Core.Native;
+using Silk.NET.Direct3D11;
+using Silk.NET.DXGI;
 using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
-
-using Device = SharpDX.Direct3D11.Device;
 
 namespace DearImGuiInjection.Handlers;
 
-internal sealed class ImGuiDX11Handler : ImGuiHandler
+internal sealed unsafe class ImGuiDX11Handler : ImGuiHandler
 {
-    private Device _device;
-    private DeviceContext _deviceContext;
-
-    private RenderTargetView _renderTargetView;
+    private ID3D11Device* _device;
+    private ID3D11DeviceContext* _deviceContext;
+    private ID3D11RenderTargetView* _renderTargetView;
 
     public override void OnShutdown()
     {
@@ -34,30 +31,51 @@ internal sealed class ImGuiDX11Handler : ImGuiHandler
             ImGui.SetCurrentContext(module.Context);
             OnShutdown();
         }
-        _renderTargetView?.Dispose();
-        _renderTargetView = null;
-        _deviceContext?.Dispose();
-        _deviceContext = null;
-        _device?.Dispose();
-        _device = null;
+        if (_renderTargetView != null)
+        {
+            _renderTargetView->Release();
+            _renderTargetView = null;
+        }
+        if (_deviceContext != null)
+        {
+            _deviceContext->Release();
+            _deviceContext = null;
+        }
+        if (_device != null)
+        {
+            _device->Release();
+            _device = null;
+        }
     }
 
-    internal unsafe void OnPresent(SwapChain swapChain, uint syncInterval, uint flags)
+    internal void OnPresent(IntPtr self, uint syncInterval, uint flags)
     {
+        IDXGISwapChain* swapChain = (IDXGISwapChain*)self;
         if (!IsInitialized)
         {
-            _device = swapChain.GetDevice<Device>();
-            _deviceContext = _device.ImmediateContext;
-            Init(swapChain.Description.OutputHandle);
+            void* device = null;
+            Guid riid = ID3D11Device.Guid;
+            swapChain->GetDevice(&riid, &device);
+            _device = (ID3D11Device*)device;
+            ID3D11DeviceContext* deviceContext = null;
+            _device->GetImmediateContext(&deviceContext);
+            _deviceContext = deviceContext;
+            SwapChainDesc desc;
+            swapChain->GetDesc(&desc);
+            Init(desc.OutputWindow);
             DearImGuiInjectionCore.TextureManager = new DX11TextureManager(_device);
             IsInitialized = true;
         }
         if (_renderTargetView == null)
         {
-            using var backBuffer = swapChain.GetBackBuffer<Texture2D>(0);
-            _renderTargetView = new RenderTargetView(_device, backBuffer);
+            Guid riid = ID3D11Texture2D.Guid;
+            void* backBuffer = null;
+            swapChain->GetBuffer(0, &riid, &backBuffer);
+            ID3D11Texture2D* texture = (ID3D11Texture2D*)backBuffer;
+            _device->CreateRenderTargetView((ID3D11Resource*)texture, null, ref _renderTargetView);
+            texture->Release();
         }
-        _deviceContext.OutputMerger.SetRenderTargets(_renderTargetView);
+        _deviceContext->OMSetRenderTargets(1, ref _renderTargetView, null);
         DearImGuiInjectionCore.TextureManager.Update();
         DearImGuiInjectionCore.MultiContextCompositor.PreNewFrameUpdateAll();
         for (int i = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack.Count - 1; i >= 0; i--)
@@ -67,7 +85,7 @@ internal sealed class ImGuiDX11Handler : ImGuiHandler
             if (!module.IsInitialized)
             {
                 ImGuiImplWin32.Init(WindowHandle);
-                ImGuiImplDX11.Init(_device.NativePointer, _deviceContext.NativePointer);
+                ImGuiImplDX11.Init(_device, _deviceContext);
                 try
                 {
                     module.OnInit?.Invoke();
@@ -97,29 +115,20 @@ internal sealed class ImGuiDX11Handler : ImGuiHandler
         DearImGuiInjectionCore.MultiContextCompositor.PostEndFrameUpdateAll();
     }
 
-    internal void OnPreResizeBuffers(SwapChain swapChain, uint bufferCount, uint width, uint height, Format newFormat,
+    internal void OnResizeBuffers(IntPtr self, uint bufferCount, uint width, uint height, Format newFormat,
         uint swapChainFlags)
     {
         if (!IsInitialized)
             return;
-        _renderTargetView?.Dispose();
-        _renderTargetView = null;
+        if (_renderTargetView != null)
+        {
+            _renderTargetView->Release();
+            _renderTargetView = null;
+        }
         foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
             ImGuiImplDX11.InvalidateDeviceObjects();
-        }
-    }
-
-    internal void OnPostResizeBuffers(SwapChain swapChain, uint bufferCount, uint width, uint height, Format newFormat,
-        uint swapChainFlags)
-    {
-        if (!IsInitialized)
-            return;
-        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
-        {
-            ImGui.SetCurrentContext(module.Context);
-            ImGuiImplDX11.CreateDeviceObjects();
         }
     }
 }
