@@ -52,14 +52,14 @@ internal abstract class ImGuiHandler
                 || uMsg == WindowMessage.WM_MOUSEHWHEEL;
             bool allowUpMessages = DearImGuiInjectionCore.AllowUpMessages.GetValue();
             IntPtr result = IntPtr.Zero;
-            foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
+            foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.ModulesMouseOwnerLast)
             {
                 var io = module.IO;
                 IntPtr handlerResult = ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, io);
                 bool modResult = false;
                 try
                 {
-                    modResult = module.OnWndProc?.Invoke(hWnd, uMsg, wParam, lParam) ?? false;
+                    modResult = module.OnWndProcHandler?.Invoke(hWnd, uMsg, wParam, lParam) ?? false;
                 }
                 catch (Exception e)
                 {

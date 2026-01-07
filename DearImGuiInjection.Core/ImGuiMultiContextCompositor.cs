@@ -2,10 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Numerics;
-using System.Runtime.InteropServices;
-using System.Text;
 
 namespace DearImGuiInjection;
 
@@ -16,10 +13,10 @@ namespace DearImGuiInjection;
 public sealed class ImGuiMultiContextCompositor
 {
     internal readonly List<ImGuiModule> Modules = new();
+    internal readonly List<ImGuiModule> ModulesMouseOwnerLast = new();
     internal readonly List<ImGuiModule> ModulesFrontToBack = new();
 
     private ImGuiContextPtr _ctxMouseFirst = null;
-    private ImGuiContextPtr _ctxMouseExclusive = null;
     private ImGuiContextPtr _ctxMouseShape = null;
     private ImGuiContextPtr _ctxKeyboardExclusive = null;
     private ImGuiContextPtr _ctxDragDropSrc = null;
@@ -30,23 +27,25 @@ public sealed class ImGuiMultiContextCompositor
     {
         Debug.Assert(!Modules.Contains(module));
         Modules.Add(module);
+        ModulesMouseOwnerLast.Add(module);
         ModulesFrontToBack.Add(module);
     }
 
     internal void RemoveModule(ImGuiModule module)
     {
         Modules.Remove(module);
+        ModulesMouseOwnerLast.Remove(module);
         ModulesFrontToBack.Remove(module);
     }
 
-    private void BringModuleToFront(ImGuiModule module, ImGuiModule moduleToKeepInputsFor)
+    private void BringModuleToFront(ImGuiModule module, ImGuiModule module_to_keep_inputs_for)
     {
         ModulesFrontToBack.Remove(module);
         ModulesFrontToBack.Insert(0, module);
         for (int i = 0; i < ModulesFrontToBack.Count; i++)
         {
             ImGuiModule other = ModulesFrontToBack[i];
-            if (other != module && other != moduleToKeepInputsFor)
+            if (other != module && other != module_to_keep_inputs_for)
                 other.IO.ClearInputKeys();
         }
     }
@@ -60,7 +59,7 @@ public sealed class ImGuiMultiContextCompositor
                 return false;
             if ((src_ctx.DragDropSourceFlags & ImGuiDragDropFlags.PayloadNoCrossContext) != 0)
                 return false;
-            fixed (ImGuiPayload* src_payload = &_ctxDragDropSrc.DragDropPayload)
+            fixed (ImGuiPayload* src_payload = &src_ctx.DragDropPayload)
             {
                 *dst_payload = *src_payload;
                 dst_payload->Data = ImGui.MemAlloc((nuint)src_payload->DataSize);
@@ -123,6 +122,17 @@ public sealed class ImGuiMultiContextCompositor
         payload->Data = null;
     }
 
+    private ImGuiModule FindModuleByContext(ImGuiContextPtr ctx)
+    {
+        for (int i = 0; i < Modules.Count; i++)
+        {
+            var module = Modules[i];
+            if (module.Context == ctx)
+                return module;
+        }
+        return null;
+    }
+
     internal unsafe void PreNewFrameUpdateAll()
     {
         // Early out when there are no modules
@@ -142,9 +152,9 @@ public sealed class ImGuiMultiContextCompositor
         // - Find out who will receive mouse position (one or multiple contexts)
         // - FInd out who will change mouse cursor (one context)
         // - Find out who has an active drag and drop
-        bool mouseDrawCursor = DearImGuiInjectionCore.MouseDrawCursor.GetValue();
-        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack)
+        for (int i = 0; i < ModulesFrontToBack.Count; i++)
         {
+            ImGuiModule module = ModulesFrontToBack[i];
             ImGuiContextPtr ctx = module.Context;
             ImGuiIOPtr io = module.IO;
 
@@ -153,13 +163,6 @@ public sealed class ImGuiMultiContextCompositor
             // - track second context to pass drag and drop payload
             if (io.WantCaptureMouse && _ctxMouseFirst.IsNull)
                 _ctxMouseFirst = ctx;
-            if (mouseDrawCursor)
-            {
-                if (_ctxMouseFirst == ctx)
-                    io.MouseDrawCursor = true;
-                else
-                    io.MouseDrawCursor = false;
-            }
             if (!ctx.HoveredWindowBeforeClear.IsNull && _ctxDragDropDst.IsNull)
                 _ctxDragDropDst = ctx;
 
@@ -176,7 +179,7 @@ public sealed class ImGuiMultiContextCompositor
 
         // If no secondary viewport are focused, we'll keep keyboard to top-most context
         if (_ctxKeyboardExclusive.IsNull)
-            _ctxKeyboardExclusive = ModulesFrontToBack.First().Context;
+            _ctxKeyboardExclusive = ModulesFrontToBack[0].Context;
 
         // Deep copy payload for replication
         if (!_ctxDragDropSrc.IsNull)
@@ -194,15 +197,17 @@ public sealed class ImGuiMultiContextCompositor
         // - Solution 3 ? somehow find a way to enforce tooltip always on own viewport, always on top?
         // Ultimately this is not so important, it's already quite a fun luxury to have cross context DND.
 #if false
-        if (!_ctxDragDropDst.IsNull && !IsSame(_ctxDragDropDst, ModulesFrontToBack.First().Context))
+        if (!_ctxDragDropDst.IsNull && _ctxDragDropDst != ModulesFrontToBack.First().Context)
             if (_ctxDragDropDst.DragDropHoldJustPressedId != 0)
-                BringModuleToFront(Modules.First(x => IsSame(x.Context, _ctxDragDropDst)), ModulesFrontToBack.First());
+                BringModuleToFront(FindModuleByContext(_ctxDragDropDst), ModulesFrontToBack[0]);
 #endif
 
         // PASS 2:
         // - Enable/disable mouse interactions on selected contexts.
         // - Enable/disable mouse cursor change so only 1 context can do it.
         // - Bring a context to front whenever clicked any of its windows.
+        // - Select a single mouse-owning context to draw the ImGui cursor.
+        bool mouse_draw_cursor = DearImGuiInjectionCore.MouseDrawCursor.GetValue();
         bool is_above_ctx_with_mouse_first = true;
         for (int i = 0; i < ModulesFrontToBack.Count; i++)
         {
@@ -223,33 +228,37 @@ public sealed class ImGuiMultiContextCompositor
             else
                 io.ConfigFlags |= ImGuiConfigFlags.NoMouseCursorChange; // Disable mouse cursor changes
 
-            if (!_ctxMouseExclusive.IsNull)
-            {
-                // Single context gets mouse interactions
-                if (_ctxMouseExclusive == ctx)
-                    io.ConfigFlags &= ~ImGuiConfigFlags.NoMouse; // Allow mouse interactions
-                else
-                    io.ConfigFlags |= ImGuiConfigFlags.NoMouse; // Disable mouse interactions
-            }
+            // Top-most io.WantCaptureMouse context & anything above it gets mouse interactions
+            if (is_above_ctx_with_mouse_first || _ctxDragDropDst == ctx)
+                io.ConfigFlags &= ~ImGuiConfigFlags.NoMouse; // Allow mouse interactions
             else
-            {
-                // Top-most io.WantCaptureMouse context & anything above it gets mouse interactions
-                if (is_above_ctx_with_mouse_first || _ctxDragDropDst == ctx)
-                    io.ConfigFlags &= ~ImGuiConfigFlags.NoMouse; // Allow mouse interactions
-                else
-                    io.ConfigFlags |= ImGuiConfigFlags.NoMouse; // Disable mouse interactions
-            }
+                io.ConfigFlags |= ImGuiConfigFlags.NoMouse; // Disable mouse interactions
 
             // Bring to front on click
-            if ((_ctxMouseExclusive == ctx || _ctxMouseFirst == ctx) && !ctx_is_front)
+            if (_ctxMouseFirst == ctx && !ctx_is_front)
             {
                 /*
                 bool any_mouse_clicked = false; // conceptually a ~ImGui::IsAnyMouseClicked(), not worth adding to API.
                 for (int n = 0; n < io.MouseClicked.Length; n++)
                     any_mouse_clicked |= io.MouseClicked[n];
+                if (any_mouse_clicked)
                 */
-                if (io.MouseClicked[0]) //any_mouse_clicked
+                if (io.MouseClicked[0])
                     BringModuleToFront(module, null);
+            }
+
+            // Top-most io.WantCaptureMouse context owns cursor drawing when mouseDrawCursor is on
+            if (mouse_draw_cursor)
+            {
+                io.MouseDrawCursor = _ctxMouseFirst == ctx;
+
+                // Put cursor-drawing context always last (WndProc uses this order for cursor ownership)
+                if (io.MouseDrawCursor
+                    && module != ModulesMouseOwnerLast[ModulesMouseOwnerLast.Count - 1])
+                {
+                    ModulesMouseOwnerLast.Remove(module);
+                    ModulesMouseOwnerLast.Add(module);
+                }
             }
 
             if (_ctxMouseFirst == ctx)
@@ -283,12 +292,11 @@ public sealed class ImGuiMultiContextCompositor
         ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.0f, 0.0f, 0.0f, 1.0f));
         ImGui.Begin("Multi-Context Compositor Overlay", ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoInputs);
         ImGui.SeparatorText("Multi-Context Compositor");
-        ImGui.Text("Front: " + ModulesFrontToBack.First().Id);
-        ImGui.Text("MousePos first: " + (!_ctxMouseFirst.IsNull ? Modules.First(x => x.Context == _ctxMouseFirst).Id : ""));
-        ImGui.Text("MousePos excl.: " + (!_ctxMouseExclusive.IsNull ? Modules.First(x => x.Context == _ctxMouseExclusive).Id : ""));
-        ImGui.Text("Keyboard excl.: " + (!_ctxKeyboardExclusive.IsNull ? Modules.First(x => x.Context == _ctxKeyboardExclusive).Id : ""));
-        ImGui.Text("DragDrop src: " + (!_ctxDragDropSrc.IsNull ? Modules.First(x => x.Context == _ctxDragDropSrc).Id : ""));
-        ImGui.Text("DragDrop dst: " + (!_ctxDragDropDst.IsNull ? Modules.First(x => x.Context == _ctxDragDropDst).Id : ""));
+        ImGui.Text("Front: " + (ModulesFrontToBack.Count > 0 ? ModulesFrontToBack[0].Id : null));
+        ImGui.Text("MousePos first: " + (!_ctxMouseFirst.IsNull ? FindModuleByContext(_ctxMouseFirst).Id : ""));
+        ImGui.Text("Keyboard excl.: " + (!_ctxKeyboardExclusive.IsNull ? FindModuleByContext(_ctxKeyboardExclusive).Id : ""));
+        ImGui.Text("DragDrop src: " + (!_ctxDragDropSrc.IsNull ? FindModuleByContext(_ctxDragDropSrc).Id : ""));
+        ImGui.Text("DragDrop dst: " + (!_ctxDragDropDst.IsNull ? FindModuleByContext(_ctxDragDropDst).Id : ""));
         ImGui.End();
         ImGui.PopStyleColor(2);
     }

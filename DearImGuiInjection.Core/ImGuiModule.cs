@@ -47,15 +47,15 @@ public sealed class ImGuiModule
             _onRender = value;
         }
     }
-    private Func<IntPtr, WindowMessage, IntPtr, IntPtr, bool> _onWndProc;
-    public Func<IntPtr, WindowMessage, IntPtr, IntPtr, bool> OnWndProc
+    private Func<IntPtr, WindowMessage, IntPtr, IntPtr, bool> _onWndProcHandler;
+    public Func<IntPtr, WindowMessage, IntPtr, IntPtr, bool> OnWndProcHandler
     {
-        get => _onWndProc;
+        get => _onWndProcHandler;
         set
         {
-            if (_onWndProc != null && value != null)
+            if (_onWndProcHandler != null && value != null)
                 Log.Warning($"Module \"{Id}\" OnWndProc cannot be set because it is already assigned.");
-            _onWndProc = value;
+            _onWndProcHandler = value;
         }
     }
 

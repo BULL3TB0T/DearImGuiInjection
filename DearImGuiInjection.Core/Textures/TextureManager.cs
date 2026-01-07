@@ -32,9 +32,9 @@ internal abstract class TextureManager<TEntryData, TEntryFrameData> : ITextureMa
         public int DelayMs { get; set; }
     }
 
-    internal unsafe struct DecodedFrame
+    internal struct DecodedFrame
     {
-        public void* Data;
+        public byte[] Pixels;
         public int Width;
         public int Height;
         public int DelayMs;
@@ -185,6 +185,8 @@ internal abstract class TextureManager<TEntryData, TEntryFrameData> : ITextureMa
         RegisteredEntries.Clear();
     }
 
+    public abstract void OnDispose();
+
     public abstract void DisposeEntryData(TEntryData entryData);
 
     public abstract bool TryCreateEntryData(IntPtr ptr, out TEntryData entryData);
@@ -197,7 +199,8 @@ internal abstract class TextureManager<TEntryData, TEntryFrameData> : ITextureMa
         frames = null;
         try
         {
-            using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var fs = new FileStream(fullPath, 
+                FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using Image<Rgba32> image = Image.Load<Rgba32>(fs, out IImageFormat format);
             int frameCount = image.Frames.Count;
             if (frameCount <= 0 || image.Width <= 0 || image.Height <= 0)
@@ -209,21 +212,16 @@ internal abstract class TextureManager<TEntryData, TEntryFrameData> : ITextureMa
                 ImageFrame<Rgba32> frame = image.Frames[i];
                 int delayMs = 0;
                 if (isGif)
+                    delayMs = frame.Metadata.GetGifMetadata().FrameDelay * 10;
+                byte[] pixels = new byte[frame.Width * frame.Height * 4];
+                frame.CopyPixelDataTo(pixels);
+                decodedFrames[i] = new DecodedFrame
                 {
-                    GifFrameMetadata gif = frame.Metadata.GetGifMetadata();
-                    int delayCs = gif.FrameDelay;
-                    delayMs = delayCs * 10;
-                }
-                byte[] _data = new byte[frame.Width * frame.Height * 4];
-                frame.CopyPixelDataTo(_data);
-                fixed (void* data = _data)
-                    decodedFrames[i] = new DecodedFrame
-                    {
-                        Data = data,
-                        Width = frame.Width,
-                        Height = frame.Height,
-                        DelayMs = delayMs
-                    };
+                    Pixels = pixels,
+                    Width = frame.Width,
+                    Height = frame.Height,
+                    DelayMs = delayMs
+                };
             }
             frames = decodedFrames;
             return true;

@@ -130,19 +130,7 @@ public static class DearImGuiInjectionCore
         Renderer?.Dispose();
         Renderer = null;
         foreach (ImGuiModule module in MultiContextCompositor.Modules)
-        {
-            ImGui.SetCurrentContext(module.Context);
-            try
-            {
-                module.OnDispose?.Invoke();
-            }
-            catch (Exception e)
-            {
-                Log.Error($"Module \"{module.Id}\" OnDispose threw an exception: {e}");
-            }
-            module.OnDispose = null;
-            ImGui.DestroyContext();
-        }
+            DestroyModule(module.Id);
     }
 
     public unsafe static ImGuiModule CreateModule(string Id)

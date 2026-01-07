@@ -389,7 +389,7 @@ internal unsafe partial struct OSVERSIONINFOEX
     public OS_TYPE wProductType;
     public byte wReserved;
 
-    public static OSVERSIONINFOEX Create() => new() { dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX) };
+    public OSVERSIONINFOEX() => dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 }
 
 internal static class Ntdll

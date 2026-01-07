@@ -725,7 +725,7 @@ internal static class ImGuiImplWin32
         const uint VER_MINORVERSION = 0x0000001;
         const byte VER_GREATER_EQUAL = 3;
 
-        var versionInfo = OSVERSIONINFOEX.Create();
+        var versionInfo = new OSVERSIONINFOEX();
         ulong conditionMask = 0;
         versionInfo.dwOSVersionInfoSize = Marshal.SizeOf<OSVERSIONINFOEX>();
         versionInfo.dwMajorVersion = major;

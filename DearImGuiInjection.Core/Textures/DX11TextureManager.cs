@@ -28,7 +28,17 @@ internal sealed unsafe class DX11TextureManager : TextureManager<DX11TextureMana
 
     private readonly ID3D11Device* _device;
 
-    public DX11TextureManager(ID3D11Device* device) => _device = device;
+    public DX11TextureManager(ID3D11Device* device)
+    {
+        _device = device;
+        _device->AddRef();
+    }
+
+    public override void OnDispose()
+    {
+        if (_device != null)
+            _device->Release();
+    }
 
     public override void DisposeEntryData(EntryData entryData)
     {
@@ -88,7 +98,7 @@ internal sealed unsafe class DX11TextureManager : TextureManager<DX11TextureMana
             for (int i = 0; i < frames.Length; i++)
             {
                 var decodedFrame = frames[i];
-                if (!TryCreateTexture(decodedFrame.Data, decodedFrame.Width, decodedFrame.Height, 
+                if (!TryCreateTexture(decodedFrame.Pixels, decodedFrame.Width, decodedFrame.Height, 
                     out ID3D11ShaderResourceView* srv))
                     throw new Exception("Failed to create texture.");
                 entryFrames[i] = new EntryFrameData
@@ -144,7 +154,7 @@ internal sealed unsafe class DX11TextureManager : TextureManager<DX11TextureMana
         return entryData.CachedTextureData;
     }
 
-    private bool TryCreateTexture(void* image_data, int width, int height, out ID3D11ShaderResourceView* srv)
+    private bool TryCreateTexture(byte[] pixels, int width, int height, out ID3D11ShaderResourceView* srv)
     {
         srv = null;
         Texture2DDesc desc = new()
@@ -160,14 +170,18 @@ internal sealed unsafe class DX11TextureManager : TextureManager<DX11TextureMana
             CPUAccessFlags = 0,
             MiscFlags = 0
         };
-        SubresourceData subResource = new()
+        SubresourceData subResource;
+        fixed (byte* image_data = pixels)
         {
-            PSysMem = image_data,
-            SysMemPitch = (uint)width * 4,
-            SysMemSlicePitch = 0
-        };
+            subResource = new()
+            {
+                PSysMem = image_data,
+                SysMemPitch = (uint)width * 4,
+                SysMemSlicePitch = 0
+            };
+        }
         ID3D11Texture2D* texture = null;
-        if (_device->CreateTexture2D(&desc, &subResource, &texture) < 0)
+        if (_device->CreateTexture2D(&desc, &subResource, &texture) < 0 || texture == null)
             return false;
         ShaderResourceViewDesc srvDesc = new()
         {

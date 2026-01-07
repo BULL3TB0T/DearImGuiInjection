@@ -32,20 +32,11 @@ internal sealed unsafe class ImGuiDX11Handler : ImGuiHandler
             OnShutdown();
         }
         if (_renderTargetView != null)
-        {
             _renderTargetView->Release();
-            _renderTargetView = null;
-        }
         if (_deviceContext != null)
-        {
             _deviceContext->Release();
-            _deviceContext = null;
-        }
         if (_device != null)
-        {
             _device->Release();
-            _device = null;
-        }
     }
 
     internal void OnPresent(IntPtr self, uint syncInterval, uint flags)

@@ -22,7 +22,6 @@ internal static class ImGuiImplDX11
     private static readonly Format _imDrawIdxFormat =
         _imDrawIdxSizeOf == 2 ? Format.FormatR16Uint : Format.FormatR32Uint;
     private unsafe static readonly nuint _textureSizeOf = (nuint)sizeof(Texture);
-    private unsafe static readonly uint _vertexConstantBufferSizeOf = (uint)sizeof(VERTEX_CONSTANT_BUFFER_DX11);
 
     private static readonly IntPtr _entryMain = Marshal.StringToHGlobalAnsi("main");
 
@@ -140,9 +139,11 @@ internal static class ImGuiImplDX11
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private unsafe struct VERTEX_CONSTANT_BUFFER_DX11
+    private struct VERTEX_CONSTANT_BUFFER_DX11
     {
-        public fixed float mvp[4 * 4];
+        public const int ElementCount = 4 * 4;
+        public const uint ByteWidth = ElementCount * sizeof(float);
+        public unsafe fixed float mvp[ElementCount];
     }
 
     private unsafe struct BACKUP_DX11_STATE
@@ -201,22 +202,14 @@ internal static class ImGuiImplDX11
             float R = draw_data->DisplayPos.X + draw_data->DisplaySize.X;
             float T = draw_data->DisplayPos.Y;
             float B = draw_data->DisplayPos.Y + draw_data->DisplaySize.Y;
-            constant_buffer->mvp[0] = 2.0f / (R - L);
-            constant_buffer->mvp[1] = 0.0f;
-            constant_buffer->mvp[2] = 0.0f;
-            constant_buffer->mvp[3] = 0.0f;
-            constant_buffer->mvp[4] = 0.0f;
-            constant_buffer->mvp[5] = 2.0f / (T - B);
-            constant_buffer->mvp[6] = 0.0f;
-            constant_buffer->mvp[7] = 0.0f;
-            constant_buffer->mvp[8] = 0.0f;
-            constant_buffer->mvp[9] = 0.0f;
-            constant_buffer->mvp[10] = 0.5f;
-            constant_buffer->mvp[11] = 0.0f;
-            constant_buffer->mvp[12] = (R + L) / (L - R);
-            constant_buffer->mvp[13] = (T + B) / (B - T);
-            constant_buffer->mvp[14] = 0.5f;
-            constant_buffer->mvp[15] = 1.0f;
+            float* mvp = stackalloc float[VERTEX_CONSTANT_BUFFER_DX11.ElementCount]
+            {
+                2.0f/(R-L),   0.0f,           0.0f,       0.0f,
+                0.0f,         2.0f/(T-B),     0.0f,       0.0f,
+                0.0f,         0.0f,           0.5f,       0.0f,
+                (R+L)/(L-R),  (T+B)/(B-T),    0.5f,       1.0f,
+            };
+            System.Buffer.MemoryCopy(mvp, constant_buffer->mvp, VERTEX_CONSTANT_BUFFER_DX11.ByteWidth, VERTEX_CONSTANT_BUFFER_DX11.ByteWidth);
             device_ctx->Unmap((ID3D11Resource*)bd->VertexConstantBuffer, 0);
         }
 
@@ -314,11 +307,11 @@ internal static class ImGuiImplDX11
         ImDrawIdx* idx_dst = (ImDrawIdx*)idx_resource.PData;
         for (int n = 0; n < draw_data->CmdListsCount; n++)
         {
-            var cmd_list = draw_data->CmdLists[n].Handle;
-            var len = cmd_list->VtxBuffer.Size * _imDrawVertSizeOf;
-            System.Buffer.MemoryCopy(cmd_list->VtxBuffer.Data, vtx_dst, len, len);
-            len = cmd_list->IdxBuffer.Size * _imDrawIdxSizeOf;
-            System.Buffer.MemoryCopy(cmd_list->IdxBuffer.Data, idx_dst, len, len);
+            ImDrawList* cmd_list = draw_data->CmdLists[n].Handle;
+            long bytes = cmd_list->VtxBuffer.Size * _imDrawVertSizeOf;
+            System.Buffer.MemoryCopy(cmd_list->VtxBuffer.Data, vtx_dst, bytes, bytes);
+            bytes = cmd_list->IdxBuffer.Size * _imDrawIdxSizeOf;
+            System.Buffer.MemoryCopy(cmd_list->IdxBuffer.Data, idx_dst, bytes, bytes);
             vtx_dst += cmd_list->VtxBuffer.Size;
             idx_dst += cmd_list->IdxBuffer.Size;
         }
@@ -340,9 +333,15 @@ internal static class ImGuiImplDX11
         device->PSGetShaderResources(0, 1, &old.PSShaderResource);
         device->PSGetSamplers(0, 1, &old.PSSampler);
         old.PSInstancesCount = old.VSInstancesCount = old.GSInstancesCount = 256;
+        ID3D11ClassInstance** psInstances = stackalloc ID3D11ClassInstance*[(int)old.PSInstancesCount];
+        old.PSInstances = psInstances;
         device->PSGetShader(&old.PS, old.PSInstances, &old.PSInstancesCount);
+        ID3D11ClassInstance** vsInstances = stackalloc ID3D11ClassInstance*[(int)old.VSInstancesCount];
+        old.VSInstances = vsInstances;
         device->VSGetShader(&old.VS, old.VSInstances, &old.VSInstancesCount);
         device->VSGetConstantBuffers(0, 1, &old.VSConstantBuffer);
+        ID3D11ClassInstance** gsInstances = stackalloc ID3D11ClassInstance*[(int)old.GSInstancesCount];
+        old.GSInstances = gsInstances;
         device->GSGetShader(&old.GS, old.GSInstances, &old.GSInstancesCount);
 
         device->IAGetPrimitiveTopology(&old.PrimitiveTopology);
@@ -581,7 +580,7 @@ internal static class ImGuiImplDX11
         {
             BufferDesc desc = new()
             {
-                ByteWidth = _vertexConstantBufferSizeOf,    
+                ByteWidth = VERTEX_CONSTANT_BUFFER_DX11.ByteWidth,    
                 Usage = Usage.Dynamic,
                 BindFlags = (uint)BindFlag.ConstantBuffer,
                 CPUAccessFlags = (uint)CpuAccessFlag.Write,
@@ -761,7 +760,9 @@ internal static class ImGuiImplDX11
         platform_io.RendererTextureMaxWidth = platform_io.RendererTextureMaxHeight = D3D11.ReqTexture2DUOrVDimension;
 
         bd->Device = device;
+        bd->Device->AddRef();
         bd->DeviceContext = device_context;
+        bd->DeviceContext->AddRef();
     }
 
     public unsafe static void Shutdown()
@@ -780,9 +781,10 @@ internal static class ImGuiImplDX11
         Marshal.FreeHGlobal(_inputElementCol);
         Marshal.FreeHGlobal(_psSrc);
         Marshal.FreeHGlobal(_psTarget);
-        // we don't own these, so no Dispose()
-        bd->Device = null;
-        bd->DeviceContext = null;
+        if (bd->Device != null)
+            bd->Device->Release();
+        if (bd->DeviceContext != null)
+            bd->DeviceContext->Release();
 
         Marshal.FreeHGlobal((IntPtr)io.BackendRendererName);
         io.BackendRendererName = null;

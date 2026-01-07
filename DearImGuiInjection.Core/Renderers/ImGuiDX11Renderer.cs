@@ -144,7 +144,8 @@ internal class ImGuiDX11Renderer : ImGuiRenderer
         return _presentOriginal(self, syncInterval, flags);
     }
 
-    private int ResizeBuffersHook(IntPtr self, uint bufferCount, uint width, uint height, Format newFormat, uint swapChainFlags)
+    private int ResizeBuffersHook(IntPtr self, uint bufferCount, uint width, uint height, Format newFormat,
+        uint swapChainFlags)
     {
         ((ImGuiDX11Handler)Handler).OnResizeBuffers(self, bufferCount, width, height, newFormat, swapChainFlags);
         return _resizeBuffersOriginal(self, bufferCount, width, height, newFormat, swapChainFlags);
