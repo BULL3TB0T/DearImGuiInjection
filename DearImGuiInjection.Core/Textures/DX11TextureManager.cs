@@ -181,7 +181,7 @@ internal sealed unsafe class DX11TextureManager : TextureManager<DX11TextureMana
             };
         }
         ID3D11Texture2D* texture = null;
-        if (_device->CreateTexture2D(&desc, &subResource, &texture) < 0 || texture == null)
+        if (_device->CreateTexture2D(&desc, &subResource, &texture) < 0)
             return false;
         ShaderResourceViewDesc srvDesc = new()
         {
