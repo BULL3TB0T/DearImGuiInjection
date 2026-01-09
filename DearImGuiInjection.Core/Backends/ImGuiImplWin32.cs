@@ -324,11 +324,11 @@ internal static class ImGuiImplWin32
         var io = ImGui.GetIO();
 
         // Setup display size (every frame to accommodate for window resizing)
-        User32.GetClientRect(bd.Hwnd, out var rect);
+        User32.GetClientRect(bd.Hwnd, out RECT rect);
         io.DisplaySize = new Vector2(rect.Right - rect.Left, rect.Bottom - rect.Top);
 
         // Setup time step
-        Kernel32.QueryPerformanceCounter(out var current_time);
+        Kernel32.QueryPerformanceCounter(out long current_time);
         io.DeltaTime = (float)(current_time - bd.Time) / bd.TicksPerSecond;
         bd.Time = current_time;
 
@@ -517,7 +517,13 @@ internal static class ImGuiImplWin32
         return ImGuiMouseSource.Mouse;
     }
 
-    // This version is in theory thread-safe in the sense that no path should access ImGui::GetCurrentContext().
+    // Win32 message handler (process Win32 mouse/keyboard inputs, etc.)
+    // Call from your application's message handler. Keep calling your message handler unless this function returns TRUE.
+    // When implementing your own backend, you can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if Dear ImGui wants to use your inputs.
+    // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
+    // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
+    // Generally you may always pass all inputs to Dear ImGui, and hide them from your application based on those two flags.
+    // PS: We treat DBLCLK messages as regular mouse down messages, so this code will work on windows classes that have the CS_DBLCLKS flag set. Our own example app code doesn't set this flag.
     public unsafe static IntPtr WndProcHandler(IntPtr hwnd, WindowMessage msg, IntPtr wParam, IntPtr lParam, ImGuiIOPtr io)
     {
         Data bd = GetBackendData(io);

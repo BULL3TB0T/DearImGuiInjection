@@ -476,7 +476,7 @@ internal static class ImGuiImplDX11
         if (tex->Status == ImTextureStatus.WantCreate)
         {
             // Create and upload new texture to graphics system
-            //Log.Debug(string.Format("UpdateTexture #%03d: WantCreate %dx%d\n", tex->UniqueID, tex->Width, tex->Height));
+            Log.Debug(string.Format("UpdateTexture #%03d: WantCreate %dx%d\n", tex->UniqueID, tex->Width, tex->Height));
             Debug.Assert(tex->TexID == ImTextureID.Null && tex->BackendUserData == null);
             Debug.Assert(tex->Format == ImTextureFormat.Rgba32);
             IntPtr pixels = (IntPtr)tex->GetPixels();

@@ -52,8 +52,9 @@ internal abstract class ImGuiHandler
                 || uMsg == WindowMessage.WM_MOUSEHWHEEL;
             bool allowUpMessages = DearImGuiInjectionCore.AllowUpMessages.GetValue();
             IntPtr result = IntPtr.Zero;
-            foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.ModulesMouseOwnerLast)
+            for (int i = 0; i < DearImGuiInjectionCore.MultiContextCompositor.ModulesMouseOwnerLast.Count; i++)
             {
+                ImGuiModule module = DearImGuiInjectionCore.MultiContextCompositor.ModulesMouseOwnerLast[i];
                 var io = module.IO;
                 IntPtr handlerResult = ImGuiImplWin32.WndProcHandler(hWnd, uMsg, wParam, lParam, io);
                 bool modResult = false;
@@ -64,6 +65,8 @@ internal abstract class ImGuiHandler
                 catch (Exception e)
                 {
                     Log.Error($"Module \"{module.Id}\" OnWndProc threw an exception: {e}");
+                    DearImGuiInjectionCore.DestroyModule(module.Id);
+                    continue;
                 }
                 if (result == IntPtr.Zero)
                 {
@@ -85,7 +88,7 @@ internal abstract class ImGuiHandler
             Marshal.GetFunctionPointerForDelegate(WindowProc));
     }
 
-    public abstract void OnShutdown();
+    public abstract void OnShutdown(bool isInitialized);
 
     public abstract void OnDispose();
     public void Dispose()

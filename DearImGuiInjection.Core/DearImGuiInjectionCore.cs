@@ -116,7 +116,7 @@ public static class DearImGuiInjectionCore
         Loader.SaveConfig();
         MultiContextCompositor = new();
         if (ShowDemoWindow.GetValue())
-            CreateModule("DearImGuiInjection").OnRender = () => { ImGui.ShowDemoWindow(); };
+            CreateModule("DearImGuiInjection").OnRender = ImGui.ShowDemoWindow;
         return true;
     }
 
@@ -162,7 +162,7 @@ public static class DearImGuiInjectionCore
         }
         MultiContextCompositor.RemoveModule(module);
         ImGui.SetCurrentContext(module.Context);
-        Renderer?.Handler.OnShutdown();
+        Renderer?.Handler.OnShutdown(module.IsInitialized);
         try
         {
             module.OnDispose?.Invoke();
