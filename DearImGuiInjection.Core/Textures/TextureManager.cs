@@ -109,20 +109,6 @@ internal abstract class TextureManager<TEntryData, TEntryFrameData> : ITextureMa
         }
     }
 
-    public void Dispose()
-    {
-        _knownWriteTimesUtc.Clear();
-        foreach (var pair in Entries)
-            DisposeEntryData(pair.Value);
-        Entries.Clear();
-        _registeredOwnerKeys.Clear();
-        foreach (var pair in RegisteredEntries)
-            DisposeEntryData(pair.Value);
-        RegisteredEntries.Clear();
-    }
-
-    public abstract void OnDispose();
-
     public bool TryGetTextureData(string relativePath, out ITextureManager.TextureData textureData)
     {
         textureData = default;
@@ -186,6 +172,20 @@ internal abstract class TextureManager<TEntryData, TEntryFrameData> : ITextureMa
         }
         return false;
     }
+
+    public void Dispose()
+    {
+        _knownWriteTimesUtc.Clear();
+        foreach (var pair in Entries)
+            DisposeEntryData(pair.Value);
+        Entries.Clear();
+        _registeredOwnerKeys.Clear();
+        foreach (var pair in RegisteredEntries)
+            DisposeEntryData(pair.Value);
+        RegisteredEntries.Clear();
+    }
+
+    public abstract void OnDispose();
 
     public abstract void DisposeEntryData(TEntryData entryData);
 
