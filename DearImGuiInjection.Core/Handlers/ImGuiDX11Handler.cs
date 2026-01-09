@@ -17,19 +17,21 @@ internal sealed unsafe class ImGuiDX11Handler : ImGuiHandler
     private ID3D11DeviceContext* _deviceContext;
     private ID3D11RenderTargetView* _renderTargetView;
 
-    public override void OnShutdown()
+    public override void OnShutdown(bool isInitialized)
     {
-        ImGuiImplDX11.Shutdown();
+        if (isInitialized)
+            ImGuiImplDX11.Shutdown();
         ImGuiImplWin32.Shutdown();
         ImGui.DestroyPlatformWindows();
     }
 
     public override void OnDispose()
     {
-        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
+        for (int i = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack.Count - 1; i >= 0; i--)
         {
+            ImGuiModule module = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack[i];
             ImGui.SetCurrentContext(module.Context);
-            OnShutdown();
+            OnShutdown(module.IsInitialized);
         }
         if (_renderTargetView != null)
             _renderTargetView->Release();
@@ -73,17 +75,24 @@ internal sealed unsafe class ImGuiDX11Handler : ImGuiHandler
             ImGui.SetCurrentContext(module.Context);
             if (!module.IsInitialized)
             {
-                ImGuiImplWin32.Init(WindowHandle);
+                if (!ImGuiImplWin32.Init(WindowHandle))
+                {
+                    DearImGuiInjectionCore.DestroyModule(module.Id);
+                    Log.Error($"Module \"{module.Id}\" ImGuiImplWin32.Init failed. Destroying module.");
+                    continue;
+                }
                 ImGuiImplDX11.Init(_device, _deviceContext);
+                module.IsInitialized = true;
                 try
                 {
                     module.OnInit?.Invoke();
                 }
                 catch (Exception e)
                 {
+                    DearImGuiInjectionCore.DestroyModule(module.Id);
                     Log.Error($"Module \"{module.Id}\" OnInit threw an exception: {e}");
+                    continue;
                 }
-                module.IsInitialized = true;
             }
             ImGuiImplWin32.NewFrame();
             ImGuiImplDX11.NewFrame();
@@ -98,6 +107,7 @@ internal sealed unsafe class ImGuiDX11Handler : ImGuiHandler
             catch (Exception e)
             {
                 ImGui.EndFrame();
+                DearImGuiInjectionCore.DestroyModule(module.Id);
                 Log.Error($"Module \"{module.Id}\" OnRender threw an exception: {e}");
             }
         }
@@ -114,8 +124,9 @@ internal sealed unsafe class ImGuiDX11Handler : ImGuiHandler
             _renderTargetView->Release();
             _renderTargetView = null;
         }
-        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
+        for (int i = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack.Count - 1; i >= 0; i--)
         {
+            ImGuiModule module = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack[i];
             ImGui.SetCurrentContext(module.Context);
             ImGuiImplDX11.InvalidateDeviceObjects();
         }
