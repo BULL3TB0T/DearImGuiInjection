@@ -27,9 +27,8 @@ internal sealed unsafe class ImGuiDX11Handler : ImGuiHandler
 
     public override void OnDispose()
     {
-        for (int i = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack.Count - 1; i >= 0; i--)
+        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
-            ImGuiModule module = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack[i];
             ImGui.SetCurrentContext(module.Context);
             OnShutdown(module.IsInitialized);
         }
