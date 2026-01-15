@@ -556,7 +556,7 @@ internal static class ImGuiImplDX12
                 int hr = bd->pd3dDevice->CreateCommittedResource(&props, HeapFlags.None, &desc,
                     ResourceStates.GenericRead, null, &riid, (void**)&bd->pTexUploadBuffer);
                 if (hr < 0)
-                    throw new InvalidOperationException($"CreateCommittedResource (upload buffer) failed: 0x{hr:X8}");
+                    throw new InvalidOperationException($"Texture upload buffer CreateCommittedResource() failed: 0x{hr:X8}");
 
                 range = new Range
                 {
@@ -565,7 +565,7 @@ internal static class ImGuiImplDX12
                 };
                 hr = bd->pTexUploadBuffer->Map(0, &range, &bd->pTexUploadBufferMapped);
                 if (hr < 0)
-                    throw new InvalidOperationException($"Map (upload buffer) failed: 0x{hr:X8}");
+                    throw new InvalidOperationException($"Texture upload buffer Map() failed: 0x{hr:X8}");
                 bd->pTexUploadBufferSize = upload_size;
             }
 
