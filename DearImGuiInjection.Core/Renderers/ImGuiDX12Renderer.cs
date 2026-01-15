@@ -125,7 +125,6 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
             Width = 0,
             Height = 0,
             Format = Format.FormatR8G8B8A8Unorm,
-            Flags = (uint)SwapChainFlag.FrameLatencyWaitableObject,
             BufferUsage = DXGI.UsageRenderTargetOutput,
             SampleDesc = new SampleDesc(1, 0),
             SwapEffect = SwapEffect.FlipDiscard,
