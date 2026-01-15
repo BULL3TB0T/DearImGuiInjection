@@ -126,7 +126,7 @@ public sealed class ImGuiMultiContextCompositor
     {
         for (int i = 0; i < Modules.Count; i++)
         {
-            var module = Modules[i];
+            ImGuiModule module = Modules[i];
             if (module.Context == ctx)
                 return module;
         }

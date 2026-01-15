@@ -157,7 +157,7 @@ internal sealed unsafe class DX11TextureManager : TextureManager<DX11TextureMana
     private bool TryCreateTexture(byte[] pixels, int width, int height, out ID3D11ShaderResourceView* srv)
     {
         srv = null;
-        Texture2DDesc desc = new()
+        Texture2DDesc desc = new Texture2DDesc
         {
             Width = (uint)width,
             Height = (uint)height,
@@ -173,7 +173,7 @@ internal sealed unsafe class DX11TextureManager : TextureManager<DX11TextureMana
         SubresourceData subResource;
         fixed (byte* image_data = pixels)
         {
-            subResource = new()
+            subResource = new SubresourceData
             {
                 PSysMem = image_data,
                 SysMemPitch = (uint)width * 4,

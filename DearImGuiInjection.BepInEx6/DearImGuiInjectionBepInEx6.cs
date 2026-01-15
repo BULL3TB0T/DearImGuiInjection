@@ -3,6 +3,7 @@ using BepInEx.Unity.Mono;
 using DearImGuiInjection;
 using DearImGuiInjection.Windows;
 using System.IO;
+using UnityEngine;
 
 namespace DearImGuiInjection.BepInEx6;
 
@@ -16,6 +17,8 @@ internal class DearImGuiInjectionBepInEx6 : BaseUnityPlugin, ILoader
 
     private void Awake()
     {
+        DontDestroyOnLoad(gameObject);
+        gameObject.hideFlags = HideFlags.HideAndDontSave;
         if (!DearImGuiInjectionCore.Init(this))
             return;
         gameObject.AddComponent<UnityMainThreadDispatcher>();

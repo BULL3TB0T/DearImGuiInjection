@@ -4,7 +4,7 @@ using System;
 namespace DearImGuiInjection.Windows;
 
 [Flags]
-internal enum TMEFlags : uint
+internal enum TrackMouseEventFlags : uint
 {
     TME_CANCEL = 0x80000000,
     TME_HOVER = 0x00000001,
@@ -14,17 +14,17 @@ internal enum TMEFlags : uint
 }
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct TRACKMOUSEEVENT
+internal struct TrackMouseEvent
 {
     public int cbSize;
     [MarshalAs(UnmanagedType.U4)]
-    public TMEFlags dwFlags;
+    public TrackMouseEventFlags dwFlags;
     public IntPtr hWnd;
     public uint dwHoverTime;
 
-    public TRACKMOUSEEVENT(TMEFlags dwFlags, IntPtr hWnd, UInt32 dwHoverTime)
+    public TrackMouseEvent(TrackMouseEventFlags dwFlags, IntPtr hWnd, UInt32 dwHoverTime)
     {
-        this.cbSize = Marshal.SizeOf(typeof(TRACKMOUSEEVENT));
+        this.cbSize = Marshal.SizeOf(typeof(TrackMouseEvent));
         this.dwFlags = dwFlags;
         this.hWnd = hWnd;
         this.dwHoverTime = dwHoverTime;

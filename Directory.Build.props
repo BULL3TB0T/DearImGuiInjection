@@ -5,7 +5,7 @@
   <PropertyGroup>
     <!--
     Build twice so all target outputs get copied into PackDir.
-    Tip: UnityCrashHandler32/64 can hint at x86/x64, but is not always reliable.
+    Tip: UnityCrashHandler32/64 can hint at x86/x64.
     -->
 
     <!--
@@ -16,7 +16,7 @@
     -->
     <MonoTargetFramework>net472</MonoTargetFramework>
     <!--
-    True when building a Mono loader (BepInEx5/6 Mono, Melon Mono).
+    True when building a Mono loader (BepInEx5/6).
     If false, the loader and Core can mismatch TFMs and the game may freeze at startup.
     -->
     <CoreUsesMonoTargetFramework>false</CoreUsesMonoTargetFramework>

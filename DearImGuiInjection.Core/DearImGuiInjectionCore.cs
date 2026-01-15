@@ -1,5 +1,7 @@
-﻿using DearImGuiInjection.Renderers;
+﻿using DearImGuiInjection.Backends;
+using DearImGuiInjection.Renderers;
 using DearImGuiInjection.Textures;
+using DearImGuiInjection.Windows;
 using Hexa.NET.ImGui;
 using HexaGen.Runtime;
 using System;
@@ -11,14 +13,12 @@ using System.Runtime.InteropServices;
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInEx5")]
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInEx6")]
 [assembly: InternalsVisibleTo("DearImGuiInjection.BepInExIL2CPP")]
-[assembly: InternalsVisibleTo("DearImGuiInjection.MelonIL2CPP")]
-[assembly: InternalsVisibleTo("DearImGuiInjection.MelonMono")]
 
 namespace DearImGuiInjection;
 
 public static class DearImGuiInjectionCore
 {
-    internal const string HexaVersion = "unity_hexa_net (v2.2.11-pre)";
+    internal const string BackendVersion = "unity_hexa_net (v2.2.11-pre)";
 
     public static LoaderKind LoaderKind => Loader?.Kind ?? LoaderKind.None;
     public static RendererKind RendererKind => Renderer?.Kind ?? RendererKind.None;
@@ -28,15 +28,17 @@ public static class DearImGuiInjectionCore
     public static string AssetsPath { get; private set; }
 
     public static IConfigEntry<bool> ShowDemoWindow;
+    public static IConfigEntry<bool> EnableDpiAwareness;
     public static IConfigEntry<bool> AllowUpMessages;
     public static IConfigEntry<bool> MouseDrawCursor;
 
     public static ITextureManager TextureManager;
     public static ImGuiMultiContextCompositor MultiContextCompositor;
 
-    internal static ImGuiRenderer Renderer;
-
     private static ILoader Loader;
+    private static ImGuiRenderer Renderer;
+
+    private static float DPIScale = -1;
 
     internal static bool Init(ILoader loader)
     {
@@ -72,6 +74,7 @@ public static class DearImGuiInjectionCore
             ImGuiRenderer renderer = kind switch
             {
                 RendererKind.DX11 => new ImGuiDX11Renderer(),
+                RendererKind.DX12 => new ImGuiDX12Renderer(),
                 _ => null
             };
             if (renderer == null)
@@ -98,7 +101,7 @@ public static class DearImGuiInjectionCore
             catch (Exception e)
             {
                 Log.Error($"Renderer {renderer.Kind} Init() failed: {e}");
-                renderer.Dispose();
+                renderer.DisposeAndUnhook();
                 break;
             }
         }
@@ -109,11 +112,15 @@ public static class DearImGuiInjectionCore
         }
         Loader.CreateConfig(ref ShowDemoWindow, "General", "Show Demo Window", false,
             "Displays the built-in Dear ImGui demo window, useful for testing and debugging the UI.");
+        Loader.CreateConfig(ref EnableDpiAwareness, "General", "Enable DPI Awareness", false,
+            "Enables DPI awareness for better UI scaling on high-DPI monitors.");
         Loader.CreateConfig(ref AllowUpMessages, "Input", "Allow Up Messages", true,
             "Allows key and mouse release events to pass through, preventing stuck keys when using the UI.");
         Loader.CreateConfig(ref MouseDrawCursor, "Input", "Mouse Draw Cursor", false,
             "Draws the Dear ImGui mouse cursor only while the mouse is hovering over the UI, otherwise the game cursor is used.");
         Loader.SaveConfig();
+        if (EnableDpiAwareness.GetValue())
+            DPIScale = ImGuiImplWin32.GetDpiScaleForMonitor(User32.MonitorFromPoint(new POINT(0, 0), MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY));
         MultiContextCompositor = new();
         if (ShowDemoWindow.GetValue())
             CreateModule("DearImGuiInjection").OnRender = ImGui.ShowDemoWindow;
@@ -127,7 +134,7 @@ public static class DearImGuiInjectionCore
             module.OnInit = null;
             module.OnRender = null;
         }
-        Renderer?.Dispose();
+        Renderer?.DisposeAndUnhook();
         Renderer = null;
         foreach (ImGuiModule module in MultiContextCompositor.Modules)
             DestroyModule(module.Id);
@@ -143,7 +150,14 @@ public static class DearImGuiInjectionCore
         ImGuiModule module = new ImGuiModule(Id);
         module.Context = ImGui.CreateContext();
         ImGui.SetCurrentContext(module.Context);
-        var io = ImGui.GetIO();
+        ImGui.StyleColorsDark();
+        if (DPIScale > 0)
+        {
+            ImGuiStylePtr style = ImGui.GetStyle();
+            style.ScaleAllSizes(DPIScale);
+            style.FontScaleDpi = DPIScale;
+        }
+        ImGuiIOPtr io = ImGui.GetIO();
         module.IO = io;
         Directory.CreateDirectory(ConfigPath);
         io.IniFilename = (byte*)Marshal.StringToHGlobalAnsi(Path.Combine(ConfigPath, $"{Id}.ini"));
@@ -162,7 +176,7 @@ public static class DearImGuiInjectionCore
         }
         MultiContextCompositor.RemoveModule(module);
         ImGui.SetCurrentContext(module.Context);
-        Renderer?.Handler.OnShutdown(module.IsInitialized);
+        Renderer?.Shutdown(module.IsInitialized);
         try
         {
             module.OnDispose?.Invoke();

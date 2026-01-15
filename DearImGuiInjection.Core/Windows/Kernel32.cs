@@ -21,6 +21,15 @@ internal static class Kernel32
     public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
 
     [DllImport(Dll, SetLastError = true)]
+    public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+    [DllImport(Dll, CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr CreateEvent(IntPtr lpEventAttributes, bool bManualReset, bool bInitialState, IntPtr lpName);
+
+    [DllImport(Dll, SetLastError = true)]
+    public static extern int CloseHandle(IntPtr hObject);
+
+    [DllImport(Dll, SetLastError = true)]
     public static extern bool QueryPerformanceCounter(out long lpPerformanceCount);
 
     [DllImport(Dll, SetLastError = true)]
@@ -40,9 +49,9 @@ internal static class Kernel32
 
     [SecurityCritical, SuppressUnmanagedCodeSecurity]
     [DllImport(Dll, CallingConvention = CallingConvention.Winapi)]
-    private static extern ulong VerSetConditionMask(ulong dwlConditionMask, uint dwTypeBitMask, byte dwConditionMask);
+    private static extern ulong VerSetConditionMask(ulong dwlConditionMask, VER_MASK dwTypeBitMask, VER_CONDITION dwConditionMask);
 
     [SecuritySafeCritical]
-    public static void VER_SET_CONDITION(ref ulong dwlConditionMask, uint dwTypeBitMask, byte dwConditionMask)
+    public static void VER_SET_CONDITION(ref ulong dwlConditionMask, VER_MASK dwTypeBitMask, VER_CONDITION dwConditionMask)
         => dwlConditionMask = VerSetConditionMask(dwlConditionMask, dwTypeBitMask, dwConditionMask);
 }

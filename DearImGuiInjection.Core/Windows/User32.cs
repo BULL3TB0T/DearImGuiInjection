@@ -614,8 +614,8 @@ internal static class User32
     [DllImport(Dll)]
     public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
 
-    [DllImport(Dll, SetLastError = true)]
-    private static extern IntPtr CreateWindowExW(uint dwExStyle, IntPtr windowClass, [MarshalAs(UnmanagedType.LPWStr)] string lpWindowName,
+    [DllImport(Dll, CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateWindowEx(uint dwExStyle, IntPtr windowClass, [MarshalAs(UnmanagedType.LPWStr)] string lpWindowName,
         uint dwStyle, int x, int y, int nWidth, int nHeight, IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr pvParam);
 
     [DllImport(Dll, CharSet = CharSet.Unicode, SetLastError = true)]
@@ -655,10 +655,13 @@ internal static class User32
     public static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);
 
     [DllImport(Dll)]
+    public static extern IntPtr MonitorFromPoint(POINT pt, MONITOR_FROM_FLAGS dwFlags);
+
+    [DllImport(Dll)]
     public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
 
-    [DllImport(Dll, SetLastError = true)]
-    private static extern ushort RegisterClassExW([In] ref WNDCLASSEXW lpwcx);
+    [DllImport(Dll, CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr RegisterClassEx(ref WndClassExW lpwcx);
 
     [DllImport(Dll)]
     public static extern bool ReleaseCapture();
@@ -699,24 +702,23 @@ internal static class User32
     public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
 
     [DllImport(Dll)]
-    public static extern int TrackMouseEvent(ref TRACKMOUSEEVENT lpEventTrack);
+    public static extern int TrackMouseEvent(ref TrackMouseEvent lpEventTrack);
 
     public static IntPtr CreateFakeWindow()
     {
-        const string ClassName = "DearImGuiInjectionWindowClass";
         const string WindowTitle = "DearImGuiInjection Window";
         IntPtr hInstance = Kernel32.GetModuleHandle(null);
-        var wc = new WNDCLASSEXW
+        WndClassExW wc = new WndClassExW
         {
-            cbSize = Marshal.SizeOf<WNDCLASSEXW>(),
+            cbSize = Marshal.SizeOf<WndClassExW>(),
             lpfnWndProc = Marshal.GetFunctionPointerForDelegate(s_WndProc),
             hInstance = hInstance,
-            lpszClassName = ClassName
+            lpszClassName = "DearImGuiInjectionWindowClass"
         };
-        ushort atom = RegisterClassExW(ref wc);
-        if (atom == 0)
+        IntPtr atom = RegisterClassEx(ref wc);
+        if (atom == IntPtr.Zero)
             throw new Win32Exception(Marshal.GetLastWin32Error());
-        IntPtr hwnd = CreateWindowExW(0, new IntPtr(atom), WindowTitle, 0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
+        IntPtr hwnd = CreateWindowEx(0, atom, WindowTitle, 0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
         if (hwnd == IntPtr.Zero)
             throw new Win32Exception(Marshal.GetLastWin32Error());
         return hwnd;

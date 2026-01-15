@@ -1,42 +1,133 @@
-﻿using DearImGuiInjection.Handlers;
+﻿using DearImGuiInjection.Backends;
+using DearImGuiInjection.Textures;
 using DearImGuiInjection.Windows;
+using Hexa.NET.ImGui;
 using Silk.NET.Core.Native;
 using Silk.NET.Direct3D11;
 using Silk.NET.DXGI;
 using System;
 using System.Diagnostics;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace DearImGuiInjection.Renderers;
 
-internal class ImGuiDX11Renderer : ImGuiRenderer
+internal sealed class ImGuiDX11Renderer : ImGuiRenderer
 {
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    private delegate int PresentDelegate(IntPtr self, uint syncInterval, uint flags);
+    private unsafe delegate int PresentDelegate(IDXGISwapChain* swapChain, uint syncInterval, uint presentFlags);
     private IntPtr _presentTarget;
     private PresentDelegate _presentDetour;
     private PresentDelegate _presentOriginal;
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    private delegate int ResizeBuffersDelegate(IntPtr self, uint bufferCount, uint width, uint height, Format newFormat, uint swapChainFlags);
+    private unsafe delegate int ResizeBuffersDelegate(IDXGISwapChain* swapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapChainFlags);
     private IntPtr _resizeBuffersTarget;
     private ResizeBuffersDelegate _resizeBuffersDetour;
     private ResizeBuffersDelegate _resizeBuffersOriginal;
 
+    private unsafe ID3D11Device* g_pd3dDevice;
+    private unsafe ID3D11DeviceContext* g_pd3dDeviceContext;
+    private unsafe ID3D11RenderTargetView* g_mainRenderTargetView;
+
     public override RendererKind Kind => RendererKind.DX11;
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
+    public unsafe override void Init()
+    {
+        IntPtr windowHandle = User32.CreateFakeWindow();
+        SwapChainDesc sd = new SwapChainDesc
+        {
+            BufferDesc = new ModeDesc
+            {
+                Width = 0,
+                Height = 0,
+                RefreshRate = new Rational(0, 0),
+                Format = Format.FormatR8G8B8A8Unorm
+            },
+            BufferUsage = DXGI.UsageRenderTargetOutput,
+            OutputWindow = windowHandle,
+            BufferCount = 1,
+            SampleDesc = new SampleDesc(1, 0),
+            Windowed = true,
+            SwapEffect = SwapEffect.Discard
+        };
+        uint createDeviceFlags = 0;
+        IDXGISwapChain* swapChain = null;
+        ID3D11Device* device = null;
+        const int FeatureLevels = 2;
+        D3DFeatureLevel* featureLevelArray = stackalloc D3DFeatureLevel[2]
+        {
+            D3DFeatureLevel.Level110,
+            D3DFeatureLevel.Level100,
+        };
+        D3DFeatureLevel* featureLevel = null;
+        ID3D11DeviceContext* deviceContext = null;
+        D3D11 API = D3D11.GetApi(null);
+        int res = API.CreateDeviceAndSwapChain(null, D3DDriverType.Hardware, 0, createDeviceFlags, featureLevelArray,
+            FeatureLevels, D3D11.SdkVersion, &sd, &swapChain, &device, featureLevel, &deviceContext);
+        if (res == unchecked((int)0x887A0004)) // DXGI_ERROR_UNSUPPORTED
+            res = API.CreateDeviceAndSwapChain(null, D3DDriverType.Warp, 0, createDeviceFlags, featureLevelArray,
+                FeatureLevels, D3D11.SdkVersion, &sd, &swapChain, &device, featureLevel, &deviceContext);
+        if (res != 0)
+            throw new InvalidOperationException($"CreateDeviceAndSwapChain failed: 0x{res:X8}");
+        nint* vTable = (nint*)swapChain->LpVtbl;
+        IntPtr presentTarget = vTable[8];
+        IntPtr resizeBuffersTarget = vTable[13];
+        deviceContext->Release();
+        device->Release();
+        swapChain->Release();
+        User32.DestroyWindow(windowHandle);
+        MinHook.Ok(MinHook.Initialize(), "MH_Initialize");
+        _presentDetour = PresentHook;
+        IntPtr presentDetourPtr = Marshal.GetFunctionPointerForDelegate(_presentDetour);
+        MinHook.Ok(MinHook.CreateHook(presentTarget, presentDetourPtr, out IntPtr presentOriginal), "MH_CreateHook(Present)");
+        MinHook.Ok(MinHook.EnableHook(presentTarget), "MH_EnableHook(Present)");
+        _presentOriginal = Marshal.GetDelegateForFunctionPointer<PresentDelegate>(presentOriginal);
+        _presentTarget = presentTarget;
+        _resizeBuffersDetour = ResizeBuffersHook;
+        IntPtr resizeBuffersDetourPtr = Marshal.GetFunctionPointerForDelegate(_resizeBuffersDetour);
+        MinHook.Ok(MinHook.CreateHook(resizeBuffersTarget, resizeBuffersDetourPtr, out IntPtr resizeBuffersOriginal), "MH_CreateHook(ResizeBuffers)");
+        MinHook.Ok(MinHook.EnableHook(resizeBuffersTarget), "MH_EnableHook(ResizeBuffers)");
+        _resizeBuffersOriginal = Marshal.GetDelegateForFunctionPointer<ResizeBuffersDelegate>(resizeBuffersOriginal);
+        _resizeBuffersTarget = resizeBuffersTarget;
+    }
+
+    public unsafe override void Dispose()
+    {
+        if (_resizeBuffersTarget != IntPtr.Zero)
+        {
+            MinHook.DisableHook(_resizeBuffersTarget);
+            MinHook.RemoveHook(_resizeBuffersTarget);
+        }
+        if (_presentTarget != IntPtr.Zero)
+        {
+            MinHook.DisableHook(_presentTarget);
+            MinHook.RemoveHook(_presentTarget);
+        }
+        foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
+        {
+            ImGui.SetCurrentContext(module.Context);
+            Shutdown(module.IsInitialized);
+        }
+        CleanupDeviceD3D();
+    }
+
+    public override void Shutdown(bool isInitialized)
+    {
+        if (isInitialized)
+            ImGuiImplDX11.Shutdown();
+        ImGuiImplWin32.Shutdown();
+        ImGui.DestroyPlatformWindows();
+    }
+
     public override bool IsSupported()
     {
         bool hasD3D11 = false;
         bool hasD3D12 = false;
         try
         {
-            foreach (var module in Process.GetCurrentProcess().Modules.Cast<ProcessModule>())
+            foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
             {
-                var name = module?.ModuleName;
+                string name = module?.ModuleName;
                 if (string.IsNullOrWhiteSpace(name))
                     continue;
                 name = name.ToLowerInvariant();
@@ -53,101 +144,111 @@ internal class ImGuiDX11Renderer : ImGuiRenderer
         return hasD3D11 && !hasD3D12;
     }
 
-    public override unsafe void Init()
+    private unsafe int PresentHook(IDXGISwapChain* g_pSwapChain, uint syncInterval, uint presentFlags)
     {
-        var windowHandle = User32.CreateFakeWindow();
-        SwapChainDesc desc = new()
+        if (!IsInitialized)
         {
-            BufferDesc = new ModeDesc
+            Guid riid = ID3D11Device.Guid;
+            ID3D11Device* device = null;
+            g_pSwapChain->GetDevice(&riid, (void**)&device);
+            g_pd3dDevice = device;
+            g_pd3dDevice->GetImmediateContext(ref g_pd3dDeviceContext);
+            SwapChainDesc sd;
+            g_pSwapChain->GetDesc(&sd);
+            AttachToWindow(sd.OutputWindow);
+            //DearImGuiInjectionCore.TextureManager = new DX11TextureManager(g_pd3dDevice);
+            CreateRenderTarget(g_pSwapChain);
+        }
+        //DearImGuiInjectionCore.TextureManager.Update();
+        DearImGuiInjectionCore.MultiContextCompositor.PreNewFrameUpdateAll();
+        for (int i = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack.Count - 1; i >= 0; i--)
+        {
+            ImGuiModule module = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack[i];
+            ImGui.SetCurrentContext(module.Context);
+            if (!module.IsInitialized)
             {
-                Width = 0,
-                Height = 0,
-                RefreshRate = new Rational(0, 0),
-                Format = Format.FormatR8G8B8A8Unorm
-            },
-            SampleDesc = new SampleDesc(1),
-            BufferUsage = DXGI.UsageRenderTargetOutput,
-            BufferCount = 1,
-            OutputWindow = windowHandle,
-            Windowed = true,
-            SwapEffect = SwapEffect.Discard
-        };
-        ID3D11Device* device = null;
-        ID3D11DeviceContext* deviceContext = null;
-        IDXGISwapChain* swapChain = null;
-        int hr = D3D11.GetApi(null).CreateDeviceAndSwapChain(
-            pAdapter: null,
-            DriverType: D3DDriverType.Hardware,
-            Software: 0,
-            Flags: 0,
-            pFeatureLevels: null,
-            FeatureLevels: 0,
-            SDKVersion: D3D11.SdkVersion,
-            pSwapChainDesc: &desc,
-            ppSwapChain: &swapChain,
-            ppDevice: &device,
-            pFeatureLevel: null,
-            ppImmediateContext: &deviceContext);
-        if (hr < 0)
-        {
-            if (deviceContext != null)
-                deviceContext->Release();
-            if (device != null)
-                device->Release();
-            if (swapChain != null)
-                swapChain->Release();
-            throw new InvalidOperationException($"CreateDeviceAndSwapChain failed: 0x{hr:X8}");
+                if (!ImGuiImplWin32.Init(WindowHandle))
+                {
+                    DearImGuiInjectionCore.DestroyModule(module.Id);
+                    Log.Error($"Module \"{module.Id}\" ImGuiImplWin32.Init failed. Destroying module.");
+                    continue;
+                }
+                ImGuiImplDX11.Init(g_pd3dDevice, g_pd3dDeviceContext);
+                module.IsInitialized = true;
+                try
+                {
+                    module.OnInit?.Invoke();
+                }
+                catch (Exception e)
+                {
+                    DearImGuiInjectionCore.DestroyModule(module.Id);
+                    Log.Error($"Module \"{module.Id}\" OnInit threw an exception: {e}");
+                    continue;
+                }
+            }
+            ImGuiImplWin32.NewFrame();
+            ImGuiImplDX11.NewFrame();
+            ImGui.NewFrame();
+            DearImGuiInjectionCore.MultiContextCompositor.PostNewFrameUpdateOne(module);
+            try
+            {
+                module.OnRender();
+                ImGui.Render();
+                g_pd3dDeviceContext->OMSetRenderTargets(1, ref g_mainRenderTargetView, null);
+                ImGuiImplDX11.RenderDrawData(ImGui.GetDrawData().Handle);
+            }
+            catch (Exception e)
+            {
+                ImGui.EndFrame();
+                DearImGuiInjectionCore.DestroyModule(module.Id);
+                Log.Error($"Module \"{module.Id}\" OnRender threw an exception: {e}");
+            }
         }
-        nint* vTable = (nint*)swapChain->LpVtbl;
-        IntPtr presentTarget = vTable[8];
-        IntPtr resizeBuffersTarget = vTable[13];
-        deviceContext->Release();
-        device->Release();
-        swapChain->Release();
-        User32.DestroyWindow(windowHandle);
-        Handler = new ImGuiDX11Handler();
-        MinHook.OK(MinHook.Initialize(), "MH_Initialize");
-        _presentDetour = PresentHook;
-        IntPtr presentDetourPtr = Marshal.GetFunctionPointerForDelegate(_presentDetour);
-        MinHook.OK(MinHook.CreateHook(presentTarget, presentDetourPtr, out IntPtr presentOriginal),
-            "MH_CreateHook(Present)");
-        MinHook.OK(MinHook.EnableHook(presentTarget), "MH_EnableHook(Present)");
-        _presentOriginal = Marshal.GetDelegateForFunctionPointer<PresentDelegate>(presentOriginal);
-        _presentTarget = presentTarget;
-        _resizeBuffersDetour = ResizeBuffersHook;
-        IntPtr resizeBuffersDetourPtr = Marshal.GetFunctionPointerForDelegate(_resizeBuffersDetour);
-        MinHook.OK(MinHook.CreateHook(resizeBuffersTarget, resizeBuffersDetourPtr, out IntPtr resizeBuffersOriginal),
-            "MH_CreateHook(ResizeBuffers)");
-        MinHook.OK(MinHook.EnableHook(resizeBuffersTarget), "MH_EnableHook(ResizeBuffers)");
-        _resizeBuffersOriginal = Marshal.GetDelegateForFunctionPointer<ResizeBuffersDelegate>(resizeBuffersOriginal);
-        _resizeBuffersTarget = resizeBuffersTarget;
+        DearImGuiInjectionCore.MultiContextCompositor.PostEndFrameUpdateAll();
+        return _presentOriginal(g_pSwapChain, syncInterval, presentFlags);
     }
 
-    public override void Dispose()
+    private unsafe int ResizeBuffersHook(IDXGISwapChain* g_pSwapChain, uint bufferCount, uint width, uint height,
+        Format newFormat, uint swapChainFlags)
     {
-        if (_resizeBuffersTarget != IntPtr.Zero)
-        {
-            MinHook.DisableHook(_resizeBuffersTarget);
-            MinHook.RemoveHook(_resizeBuffersTarget);
-        }
-        if (_presentTarget != IntPtr.Zero)
-        {
-            MinHook.DisableHook(_presentTarget);
-            MinHook.RemoveHook(_presentTarget);
-        }
-        Handler?.Dispose();
+        CleanupRenderTarget();
+        int hr = _resizeBuffersOriginal(g_pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
+        CreateRenderTarget(g_pSwapChain);
+        return hr;
     }
 
-    private int PresentHook(IntPtr self, uint syncInterval, uint flags)
+    private unsafe void CleanupDeviceD3D()
     {
-        ((ImGuiDX11Handler)Handler).OnPresent(self, syncInterval, flags);
-        return _presentOriginal(self, syncInterval, flags);
+        CleanupRenderTarget();
+        if (g_pd3dDeviceContext != null)
+        {
+            g_pd3dDeviceContext->Release();
+            g_pd3dDeviceContext = null;
+        }
+        if (g_pd3dDevice != null)
+        {
+            g_pd3dDevice->Release();
+            g_pd3dDevice = null;
+        }
     }
 
-    private int ResizeBuffersHook(IntPtr self, uint bufferCount, uint width, uint height, Format newFormat,
-        uint swapChainFlags)
+    private unsafe void CreateRenderTarget(IDXGISwapChain* g_pSwapChain)
     {
-        ((ImGuiDX11Handler)Handler).OnResizeBuffers(self, bufferCount, width, height, newFormat, swapChainFlags);
-        return _resizeBuffersOriginal(self, bufferCount, width, height, newFormat, swapChainFlags);
+        if (g_pd3dDevice == null)
+            return;
+        Guid riid = ID3D11Texture2D.Guid;
+        ID3D11Texture2D* pBackBuffer = null;
+        g_pSwapChain->GetBuffer(0, &riid, (void**)&pBackBuffer);
+        g_pd3dDevice->CreateRenderTargetView((ID3D11Resource*)pBackBuffer, null, ref g_mainRenderTargetView);
+        pBackBuffer->Release();
+    }
+
+    private unsafe void CleanupRenderTarget()
+    {
+        if (g_mainRenderTargetView != null)
+        {
+            g_mainRenderTargetView->Release();
+            g_mainRenderTargetView = null;
+        }
     }
 }

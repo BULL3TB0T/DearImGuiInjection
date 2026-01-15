@@ -352,18 +352,18 @@ public enum PRODUCT_SUITE : short
     VER_SUITE_SMALLBUSINESS_RESTRICTED = 0x00000020,
     VER_SUITE_STORAGE_SERVER = 0x00002000,
     VER_SUITE_TERMINAL = 0x00000010,
-    VER_SUITE_WH_SERVER = unchecked((short)0x00008000),
+    VER_SUITE_WH_SERVER = unchecked((short)0x00008000)
 }
 
-internal enum OS_TYPE : byte
+internal enum OS_TYPE
 {
-    VER_NT_WORKSTATION = 0x00000001,
-    VER_NT_DOMAIN_CONTROLLER = 0x00000002,
-    VER_NT_SERVER = 0x00000003,
+    VER_NT_WORKSTATION,
+    VER_NT_DOMAIN_CONTROLLER,
+    VER_NT_SERVER
 }
 
 [Flags]
-internal enum VER_MASK : int
+internal enum VER_MASK : uint
 {
     VER_MINORVERSION = 0x0000001,
     VER_MAJORVERSION = 0x0000002,
@@ -372,7 +372,16 @@ internal enum VER_MASK : int
     VER_SERVICEPACKMINOR = 0x0000010,
     VER_SERVICEPACKMAJOR = 0x0000020,
     VER_SUITENAME = 0x0000040,
-    VER_PRODUCT_TYPE = 0x0000080,
+    VER_PRODUCT_TYPE = 0x0000080
+}
+
+internal enum VER_CONDITION
+{
+    VER_EQUAL = 1,
+    VER_GREATER,
+    VER_GREATER_EQUAL,
+    VER_LESS ,
+    VER_LESS_EQUAL
 }
 
 internal unsafe partial struct OSVERSIONINFOEX
@@ -388,8 +397,6 @@ internal unsafe partial struct OSVERSIONINFOEX
     public PRODUCT_SUITE wSuiteMask;
     public OS_TYPE wProductType;
     public byte wReserved;
-
-    public OSVERSIONINFOEX() => dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 }
 
 internal static class Ntdll

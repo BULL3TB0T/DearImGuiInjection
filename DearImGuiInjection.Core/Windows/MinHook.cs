@@ -115,7 +115,7 @@ internal static class MinHook
     public static MH_STATUS DisableHook(IntPtr target)
         => IntPtr.Size == 8 ? MinHook64.MH_DisableHook(target) : MinHook86.MH_DisableHook(target);
 
-    public static void OK(MH_STATUS status, string operation)
+    public static void Ok(MH_STATUS status, string operation)
     {
         if (status != 0)
             throw new InvalidOperationException($"{operation} failed (MinHook status={status}).");

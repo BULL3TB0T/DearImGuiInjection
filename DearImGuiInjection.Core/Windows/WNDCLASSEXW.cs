@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace DearImGuiInjection.Windows;
 
-internal struct WNDCLASSEXW
+internal struct WndClassExW
 {
     public int cbSize;
     public int style;
