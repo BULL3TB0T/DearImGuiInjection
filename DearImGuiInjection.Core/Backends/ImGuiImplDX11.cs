@@ -652,16 +652,16 @@ internal static class ImGuiImplDX11
                 DestroyTexture(tex);
         }
 
-        if (bd->pTexSamplerLinear != null) { bd->pTexSamplerLinear->Release(); bd->pTexSamplerLinear = default; }
-        if (bd->pIB != null) { bd->pIB->Release(); bd->pIB = default; }
-        if (bd->pVB != null) { bd->pVB->Release(); bd->pVB = default; }
-        if (bd->pBlendState != null) { bd->pBlendState->Release(); bd->pBlendState = default; }
-        if (bd->pDepthStencilState != null) { bd->pDepthStencilState->Release(); bd->pDepthStencilState = default; }
-        if (bd->pRasterizerState != null) { bd->pRasterizerState->Release(); bd->pRasterizerState = default; }
-        if (bd->pPixelShader != null) { bd->pPixelShader->Release(); bd->pPixelShader = default; }
-        if (bd->pVertexConstantBuffer != null) { bd->pVertexConstantBuffer->Release(); bd->pVertexConstantBuffer = default; }
-        if (bd->pInputLayout != null) { bd->pInputLayout->Release(); bd->pInputLayout = default; }
-        if (bd->pVertexShader != null) { bd->pVertexShader->Release(); bd->pVertexShader = default; }
+        if (bd->pTexSamplerLinear != null) { bd->pTexSamplerLinear->Release(); bd->pTexSamplerLinear = null; }
+        if (bd->pIB != null) { bd->pIB->Release(); bd->pIB = null; }
+        if (bd->pVB != null) { bd->pVB->Release(); bd->pVB = null; }
+        if (bd->pBlendState != null) { bd->pBlendState->Release(); bd->pBlendState = null; }
+        if (bd->pDepthStencilState != null) { bd->pDepthStencilState->Release(); bd->pDepthStencilState = null; }
+        if (bd->pRasterizerState != null) { bd->pRasterizerState->Release(); bd->pRasterizerState = null; }
+        if (bd->pPixelShader != null) { bd->pPixelShader->Release(); bd->pPixelShader = null; }
+        if (bd->pVertexConstantBuffer != null) { bd->pVertexConstantBuffer->Release(); bd->pVertexConstantBuffer = null; }
+        if (bd->pInputLayout != null) { bd->pInputLayout->Release(); bd->pInputLayout = null; }
+        if (bd->pVertexShader != null) { bd->pVertexShader->Release(); bd->pVertexShader = null; }
     }
 
     public unsafe static bool Init(ID3D11Device* device, ID3D11DeviceContext* device_context)
