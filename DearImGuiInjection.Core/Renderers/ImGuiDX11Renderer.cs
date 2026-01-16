@@ -29,8 +29,6 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
     private unsafe ID3D11DeviceContext* g_pd3dDeviceContext;
     private unsafe ID3D11RenderTargetView* g_mainRenderTargetView;
 
-    public override RendererKind Kind => RendererKind.DX11;
-
     public unsafe override void Init()
     {
         IntPtr windowHandle = User32.CreateFakeWindow();
@@ -117,31 +115,6 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
             ImGuiImplDX11.Shutdown();
         ImGuiImplWin32.Shutdown();
         ImGui.DestroyPlatformWindows();
-    }
-
-    public override bool IsSupported()
-    {
-        bool hasD3D11 = false;
-        bool hasD3D12 = false;
-        try
-        {
-            foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
-            {
-                string name = module?.ModuleName;
-                if (string.IsNullOrWhiteSpace(name))
-                    continue;
-                name = name.ToLowerInvariant();
-                if (name.Contains("d3d11"))
-                    hasD3D11 = true;
-                else if (name.Contains("d3d12"))
-                    hasD3D12 = true;
-            }
-        }
-        catch
-        {
-            return false;
-        }
-        return hasD3D11 && !hasD3D12;
     }
 
     private unsafe int PresentHook(IDXGISwapChain* g_pSwapChain, uint syncInterval, uint presentFlags)

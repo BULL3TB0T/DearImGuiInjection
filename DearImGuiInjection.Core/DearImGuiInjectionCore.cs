@@ -21,7 +21,7 @@ public static class DearImGuiInjectionCore
     internal const string BackendVersion = "unity_hexa_net (v2.2.11-pre)";
 
     public static LoaderKind LoaderKind => Loader?.Kind ?? LoaderKind.None;
-    public static RendererKind RendererKind => Renderer?.Kind ?? RendererKind.None;
+    public static RendererKind RendererKind = RendererKind.None;
 
     public static string ConfigPath { get; private set; }
     public static string AssemblyPath { get; private set; }
@@ -40,7 +40,7 @@ public static class DearImGuiInjectionCore
 
     private static float DPIScale = -1;
 
-    internal static bool Init(ILoader loader)
+    internal static bool Init(ILoader loader, int graphicsDeviceType, string graphicsDeviceTypeName)
     {
         Loader = loader;
         ConfigPath = Path.Combine(Loader.ConfigPath, "DearImGuiInjection");
@@ -69,45 +69,41 @@ public static class DearImGuiInjectionCore
             return false;
         };
         Log.Init(Loader);
-        foreach (RendererKind kind in Enum.GetValues(typeof(RendererKind)))
+        RendererKind rendererKind = graphicsDeviceType switch
         {
-            ImGuiRenderer renderer = kind switch
-            {
-                RendererKind.DX11 => new ImGuiDX11Renderer(),
-                RendererKind.DX12 => new ImGuiDX12Renderer(),
-                _ => null
-            };
-            if (renderer == null)
-                continue;
-            bool isSupported = false;
-            try
-            {
-                isSupported = renderer.IsSupported();
-            }
-            catch (Exception e)
-            {
-                Log.Error($"Renderer {renderer.Kind} IsSupported() failed: {e}");
-                isSupported = false;
-            }
-            if (!isSupported)
-                continue;
-            try
-            {
-                renderer.Init();
-                Log.Info($"Renderer {renderer.Kind} Init()");
-                Renderer = renderer;
-                break;
-            }
-            catch (Exception e)
-            {
-                Log.Error($"Renderer {renderer.Kind} Init() failed: {e}");
-                renderer.DisposeAndUnhook();
-                break;
-            }
+            2 => RendererKind.DX11,
+            18 => RendererKind.DX12,
+            21 => RendererKind.Vulkan,
+            17 => RendererKind.OpenGL,
+            _ => RendererKind.None
+        };
+        if (rendererKind == RendererKind.None)
+        {
+            Log.Error($"Unsupported graphics API: {graphicsDeviceTypeName} ({graphicsDeviceType})");
+            return false;
         }
-        if (Renderer == null)
+        ImGuiRenderer renderer = rendererKind switch
         {
-            Log.Error($"Could not find the right renderer.");
+            RendererKind.DX11 => new ImGuiDX11Renderer(),
+            RendererKind.DX12 => new ImGuiDX12Renderer(),
+            _ => null
+        };
+        if (renderer == null)
+        {
+            Log.Error($"Renderer {rendererKind} is not supported yet");
+            return false;
+        }
+        try
+        {
+            renderer.Init();
+            Log.Info($"Renderer {rendererKind} Init()");
+            Renderer = renderer;
+            RendererKind = rendererKind;
+        }
+        catch (Exception e)
+        {
+            Log.Error($"Renderer {rendererKind} Init() failed: {e}");
+            renderer.DisposeAndUnhook();
             return false;
         }
         Loader.CreateConfig(ref ShowDemoWindow, "General", "Show Demo Window", false,

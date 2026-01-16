@@ -4,6 +4,7 @@ using DearImGuiInjection;
 using DearImGuiInjection.Windows;
 using System.IO;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace DearImGuiInjection.BepInEx5;
 
@@ -19,7 +20,8 @@ internal class DearImGuiInjectionBepInEx5 : BaseUnityPlugin, ILoader
     {
         DontDestroyOnLoad(gameObject);
         gameObject.hideFlags = HideFlags.HideAndDontSave;
-        if (!DearImGuiInjectionCore.Init(this))
+        GraphicsDeviceType graphicsDeviceType = SystemInfo.graphicsDeviceType;
+        if (!DearImGuiInjectionCore.Init(this, (int)graphicsDeviceType, graphicsDeviceType.ToString()))
             return;
         gameObject.AddComponent<UnityMainThreadDispatcher>();
     }

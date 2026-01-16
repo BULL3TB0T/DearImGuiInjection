@@ -114,8 +114,6 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
     private IntPtr g_fenceEvent;
     private ulong g_fenceLastSignaledValue;
 
-    public override RendererKind Kind => RendererKind.DX12;
-
     public unsafe override void Init()
     {
         IntPtr windowHandle = User32.CreateFakeWindow();
@@ -246,28 +244,6 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
             ImGuiImplDX12.Shutdown();
         ImGuiImplWin32.Shutdown();
         ImGui.DestroyPlatformWindows();
-    }
-
-    public override bool IsSupported()
-    {
-        bool isSupported = false;
-        try
-        {
-            foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
-            {
-                string name = module?.ModuleName;
-                if (string.IsNullOrWhiteSpace(name))
-                    continue;
-                name = name.ToLowerInvariant();
-                if (name.Contains("d3d12"))
-                    isSupported = true;
-            }
-        }
-        catch
-        {
-            return false;
-        }
-        return isSupported;
     }
 
     private unsafe int Present1Hook(IDXGISwapChain3* g_pSwapChain, uint syncInterval, uint presentFlags, PresentParameters* presentParameters)

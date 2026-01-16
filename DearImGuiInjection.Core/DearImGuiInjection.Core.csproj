@@ -75,5 +75,10 @@
     <Message Importance="High" Text="Launching Steam game AppID=$(SteamAppId)..." />
     <Exec Command="cmd /c start &quot;&quot; &quot;steam://rungameid/$(SteamAppId)&quot;" />
   </Target>
+  <Target Name="StartExecutableAfterPacking" AfterTargets="Build" Condition="'$(Configuration)'!='Debug' And '$(StartExecutableAfterBuild)'=='true' And '$(TargetFramework)'!=''">
+    <Message Importance="High" Text="Launching exe..." />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;Start-Process -FilePath '$(ExecutableFileName).exe' -WorkingDirectory '$(ExecutableDir)' -ArgumentList '$(ExecutableArgs)'&quot;" Condition="'$(ExecutableArgs)'!=''" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;Start-Process -FilePath '$(ExecutableFileName).exe' -WorkingDirectory '$(ExecutableDir)'&quot;" Condition="'$(ExecutableArgs)'==''" />
+  </Target>
 
 </Project>

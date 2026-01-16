@@ -26,6 +26,11 @@
 
     <PackFolderName>Build</PackFolderName>
     <PackDir>$(SolutionDir)$(PackFolderName)\DearImGuiInjection-$(Configuration)_$(Platform)\</PackDir>
+    <StartExecutableAfterBuild>false</StartExecutableAfterBuild>
+    <ExecutableDir></ExecutableDir>
+    <ExecutableFileName></ExecutableFileName>
+    <ExecutableArgs></ExecutableArgs>
+
 
     <AssetsFolderName>Assets</AssetsFolderName>
     <AssetsDir>$(SolutionDir)$(AssetsFolderName)\</AssetsDir>

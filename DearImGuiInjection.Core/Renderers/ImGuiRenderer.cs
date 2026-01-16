@@ -10,13 +10,13 @@ public enum RendererKind
 {
     None,
     DX11,
-    DX12
+    DX12,
+    Vulkan,
+    OpenGL
 }
 
 internal abstract class ImGuiRenderer
 {
-    public abstract RendererKind Kind { get; }
-
     public bool IsInitialized { get; private set; }
     public IntPtr WindowHandle { get; private set; }
     private User32.WndProcDelegate WindowProc;
@@ -25,8 +25,6 @@ internal abstract class ImGuiRenderer
     public abstract void Init();
     public abstract void Dispose();
     public abstract void Shutdown(bool isInitialized);
-
-    public abstract bool IsSupported();
 
     internal void DisposeAndUnhook()
     {

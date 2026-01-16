@@ -5,6 +5,8 @@ using DearImGuiInjection;
 using DearImGuiInjection.Renderers;
 using DearImGuiInjection.Windows;
 using System.IO;
+using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace DearImGuiInjection.BepInExIL2CPP;
 
@@ -19,7 +21,8 @@ internal class DearImGuiInjectionBepInExI2LCPP : BasePlugin, ILoader
 
     public override void Load()
     {
-        if (!DearImGuiInjectionCore.Init(this))
+        GraphicsDeviceType graphicsDeviceType = SystemInfo.graphicsDeviceType;
+        if (!DearImGuiInjectionCore.Init(this, (int)graphicsDeviceType, graphicsDeviceType.ToString()))
             return;
         AddComponent<UnityMainThreadDispatcher>();
     }
