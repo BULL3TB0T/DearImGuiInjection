@@ -24,13 +24,13 @@
     <StartSteamGameAfterBuild>false</StartSteamGameAfterBuild>
     <SteamAppId>0</SteamAppId>
 
-    <PackFolderName>Build</PackFolderName>
-    <PackDir>$(SolutionDir)$(PackFolderName)\DearImGuiInjection-$(Configuration)_$(Platform)\</PackDir>
     <StartExecutableAfterBuild>false</StartExecutableAfterBuild>
     <ExecutableDir></ExecutableDir>
     <ExecutableFileName></ExecutableFileName>
     <ExecutableArgs></ExecutableArgs>
 
+    <PackFolderName>Build</PackFolderName>
+    <PackDir>$(SolutionDir)$(PackFolderName)\DearImGuiInjection-$(Configuration)_$(Platform)\</PackDir>
 
     <AssetsFolderName>Assets</AssetsFolderName>
     <AssetsDir>$(SolutionDir)$(AssetsFolderName)\</AssetsDir>
