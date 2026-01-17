@@ -31,6 +31,8 @@
     <PackageReference Include="Silk.NET.Direct3D11" Version="2.22.0" />
     <PackageReference Include="Silk.NET.Direct3D12" Version="2.22.0" />
     <PackageReference Include="Silk.NET.DXGI" Version="2.22.0" />
+    <PackageReference Include="Silk.NET.Vulkan" Version="2.22.0" />
+    <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.22.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
 

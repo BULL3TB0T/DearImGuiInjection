@@ -77,21 +77,15 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private unsafe delegate int Present1Delegate(IDXGISwapChain3* swapChain, uint syncInterval, uint presentFlags, PresentParameters* presentParameters);
-    private IntPtr _present1Target;
-    private Present1Delegate _present1Detour;
-    private Present1Delegate _present1Original;
+    private MinHookDetour<Present1Delegate> _present1;
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private unsafe delegate int ResizeBuffersDelegate(IDXGISwapChain3* swapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapChainFlags);
-    private IntPtr _resizeBuffersTarget;
-    private ResizeBuffersDelegate _resizeBuffersDetour;
-    private ResizeBuffersDelegate _resizeBuffersOriginal;
+    private MinHookDetour<ResizeBuffersDelegate> _resizeBuffers;
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private unsafe delegate void ExecuteCommandListsDelegate(ID3D12CommandQueue* commandQueue, uint numCommandLists, ID3D12CommandList** ppCommandLists);
-    private IntPtr _executeCommandListsTarget;
-    private ExecuteCommandListsDelegate _executeCommandListsDetour;
-    private ExecuteCommandListsDelegate _executeCommandListsOriginal;
+    private MinHookDetour<ExecuteCommandListsDelegate> _executeCommandLists;
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private unsafe delegate void SrvAllocDelegate(ImGuiImplDX12.InitInfo* info, CpuDescriptorHandle* out_cpu_desc_handle, GpuDescriptorHandle* out_gpu_desc_handle);
@@ -181,55 +175,32 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
             pd3dDevice->Release();
             throw new InvalidOperationException($"QueryInterface failed: 0x{res:X8}");
         }
+        MinHook.Ok(MinHook.Initialize(), "MH_Initialize");
         nint* swapChainVTable = (nint*)pSwapChain->LpVtbl;
-        IntPtr present1Target = swapChainVTable[22];
-        IntPtr resizeBuffersTarget = swapChainVTable[13];
+        _present1 = new("Present1");
+        _present1.Create(swapChainVTable[22], Present1Detour);
+        _present1.Enable();
+        _resizeBuffers = new("ResizeBuffers");
+        _resizeBuffers.Create(swapChainVTable[13], ResizeBuffersDetour);
+        _resizeBuffers.Enable();
         nint* commandQueueVTable = (nint*)pd3dCommandQueue->LpVtbl;
-        IntPtr executeCommandListsTarget = commandQueueVTable[10];
+        _executeCommandLists = new("ExecuteCommandLists");
+        _executeCommandLists.Create(commandQueueVTable[10], ExecuteCommandListsDetour);
+        _executeCommandLists.Enable();
         pSwapChain->Release();
         swapChain1->Release();
         dxgiFactory->Release();
         pd3dCommandQueue->Release();
         pd3dDevice->Release();
         User32.DestroyWindow(windowHandle);
-        MinHook.Ok(MinHook.Initialize(), "MH_Initialize");
-        _present1Detour = Present1Hook;
-        IntPtr present1DetourPtr = Marshal.GetFunctionPointerForDelegate(_present1Detour);
-        MinHook.Ok(MinHook.CreateHook(present1Target, present1DetourPtr, out IntPtr present1Original), "MH_CreateHook(Present1)");
-        MinHook.Ok(MinHook.EnableHook(present1Target), "MH_EnableHook(Present1)");
-        _present1Original = Marshal.GetDelegateForFunctionPointer<Present1Delegate>(present1Original);
-        _present1Target = present1Target;
-        _resizeBuffersDetour = ResizeBuffersHook;
-        IntPtr resizeBuffersDetourPtr = Marshal.GetFunctionPointerForDelegate(_resizeBuffersDetour);
-        MinHook.Ok(MinHook.CreateHook(resizeBuffersTarget, resizeBuffersDetourPtr, out IntPtr resizeBuffersOriginal), "MH_CreateHook(ResizeBuffers)");
-        MinHook.Ok(MinHook.EnableHook(resizeBuffersTarget), "MH_EnableHook(ResizeBuffers)");
-        _resizeBuffersOriginal = Marshal.GetDelegateForFunctionPointer<ResizeBuffersDelegate>(resizeBuffersOriginal);
-        _resizeBuffersTarget = resizeBuffersTarget;
-        _executeCommandListsDetour = ExecuteCommandListsHook;
-        IntPtr executeDetourPtr = Marshal.GetFunctionPointerForDelegate(_executeCommandListsDetour);
-        MinHook.Ok(MinHook.CreateHook(executeCommandListsTarget, executeDetourPtr, out IntPtr executeOriginal), "MH_CreateHook(ExecuteCommandLists)");
-        MinHook.Ok(MinHook.EnableHook(executeCommandListsTarget), "MH_EnableHook(ExecuteCommandLists)");
-        _executeCommandListsOriginal = Marshal.GetDelegateForFunctionPointer<ExecuteCommandListsDelegate>(executeOriginal);
-        _executeCommandListsTarget = executeCommandListsTarget;
     }
 
     public unsafe override void Dispose()
     {
-        if (_executeCommandListsTarget != IntPtr.Zero)
-        {
-            MinHook.DisableHook(_executeCommandListsTarget);
-            MinHook.RemoveHook(_executeCommandListsTarget);
-        }
-        if (_resizeBuffersTarget != IntPtr.Zero)
-        {
-            MinHook.DisableHook(_resizeBuffersTarget);
-            MinHook.RemoveHook(_resizeBuffersTarget);
-        }
-        if (_present1Target != IntPtr.Zero)
-        {
-            MinHook.DisableHook(_present1Target);
-            MinHook.RemoveHook(_present1Target);
-        }
+        _executeCommandLists.Dispose();
+        _resizeBuffers.Dispose();
+        _present1.Dispose();
+        MinHook.Ok(MinHook.Uninitialize(), "MH_Uninitialize");
         foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
@@ -246,10 +217,10 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
         ImGui.DestroyPlatformWindows();
     }
 
-    private unsafe int Present1Hook(IDXGISwapChain3* g_pSwapChain, uint syncInterval, uint presentFlags, PresentParameters* presentParameters)
+    private unsafe int Present1Detour(IDXGISwapChain3* g_pSwapChain, uint syncInterval, uint presentFlags, PresentParameters* presentParameters)
     {
         if (g_pd3dCommandQueue == null)
-            return _present1Original(g_pSwapChain, syncInterval, presentFlags, presentParameters);
+            return _present1.Original(g_pSwapChain, syncInterval, presentFlags, presentParameters);
         if (!IsInitialized)
         {
             SwapChainDesc sd;
@@ -416,19 +387,19 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
             }
         }
         DearImGuiInjectionCore.MultiContextCompositor.PostEndFrameUpdateAll();
-        return _present1Original(g_pSwapChain, syncInterval, presentFlags, presentParameters);
+        return _present1.Original(g_pSwapChain, syncInterval, presentFlags, presentParameters);
     }
 
-    private unsafe int ResizeBuffersHook(IDXGISwapChain3* g_pSwapChain, uint bufferCount, uint width, uint height,
+    private unsafe int ResizeBuffersDetour(IDXGISwapChain3* g_pSwapChain, uint bufferCount, uint width, uint height,
         Format newFormat, uint swapChainFlags)
     {
         CleanupRenderTarget();
-        int hr = _resizeBuffersOriginal(g_pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
+        int hr = _resizeBuffers.Original(g_pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
         CreateRenderTarget(g_pSwapChain);
         return hr;
     }
 
-    private unsafe void ExecuteCommandListsHook(ID3D12CommandQueue* commandQueue, uint numCommandLists,
+    private unsafe void ExecuteCommandListsDetour(ID3D12CommandQueue* commandQueue, uint numCommandLists,
         ID3D12CommandList** ppCommandLists)
     {
         if (commandQueue != g_pd3dCommandQueue && commandQueue->GetDesc().Type == CommandListType.Direct)
@@ -438,7 +409,7 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
             g_pd3dCommandQueue = commandQueue;
             g_pd3dCommandQueue->AddRef();
         }
-        _executeCommandListsOriginal(commandQueue, numCommandLists, ppCommandLists);
+        _executeCommandLists.Original(commandQueue, numCommandLists, ppCommandLists);
     }
 
     private unsafe void CreateRenderTarget(IDXGISwapChain3* g_pSwapChain)

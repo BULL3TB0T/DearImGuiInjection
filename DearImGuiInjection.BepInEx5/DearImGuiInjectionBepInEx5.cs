@@ -21,7 +21,7 @@ internal class DearImGuiInjectionBepInEx5 : BaseUnityPlugin, ILoader
         DontDestroyOnLoad(gameObject);
         gameObject.hideFlags = HideFlags.HideAndDontSave;
         GraphicsDeviceType graphicsDeviceType = SystemInfo.graphicsDeviceType;
-        if (!DearImGuiInjectionCore.Init(this, (int)graphicsDeviceType, graphicsDeviceType.ToString()))
+        if (!DearImGuiInjectionCore.Init(this, (int)graphicsDeviceType, graphicsDeviceType.ToString(), Application.platform == RuntimePlatform.WindowsPlayer))
             return;
         gameObject.AddComponent<UnityMainThreadDispatcher>();
     }

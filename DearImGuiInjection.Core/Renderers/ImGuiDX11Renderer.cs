@@ -15,15 +15,11 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
 {
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private unsafe delegate int PresentDelegate(IDXGISwapChain* swapChain, uint syncInterval, uint presentFlags);
-    private IntPtr _presentTarget;
-    private PresentDelegate _presentDetour;
-    private PresentDelegate _presentOriginal;
+    private MinHookDetour<PresentDelegate> _present;
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private unsafe delegate int ResizeBuffersDelegate(IDXGISwapChain* swapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapChainFlags);
-    private IntPtr _resizeBuffersTarget;
-    private ResizeBuffersDelegate _resizeBuffersDetour;
-    private ResizeBuffersDelegate _resizeBuffersOriginal;
+    private MinHookDetour<ResizeBuffersDelegate> _resizeBuffers;
 
     private unsafe ID3D11Device* g_pd3dDevice;
     private unsafe ID3D11DeviceContext* g_pd3dDeviceContext;
@@ -67,40 +63,25 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
                 FeatureLevels, D3D11.SdkVersion, &sd, &swapChain, &device, featureLevel, &deviceContext);
         if (res != 0)
             throw new InvalidOperationException($"CreateDeviceAndSwapChain failed: 0x{res:X8}");
+        MinHook.Ok(MinHook.Initialize(), "MH_Initialize");
         nint* vTable = (nint*)swapChain->LpVtbl;
-        IntPtr presentTarget = vTable[8];
-        IntPtr resizeBuffersTarget = vTable[13];
+        _present = new("Present");
+        _present.Create(vTable[8], PresentDetour);
+        _present.Enable();
+        _resizeBuffers = new("ResizeBuffers");
+        _resizeBuffers.Create(vTable[13], ResizeBuffersDetour);
+        _resizeBuffers.Enable();
         deviceContext->Release();
         device->Release();
         swapChain->Release();
         User32.DestroyWindow(windowHandle);
-        MinHook.Ok(MinHook.Initialize(), "MH_Initialize");
-        _presentDetour = PresentHook;
-        IntPtr presentDetourPtr = Marshal.GetFunctionPointerForDelegate(_presentDetour);
-        MinHook.Ok(MinHook.CreateHook(presentTarget, presentDetourPtr, out IntPtr presentOriginal), "MH_CreateHook(Present)");
-        MinHook.Ok(MinHook.EnableHook(presentTarget), "MH_EnableHook(Present)");
-        _presentOriginal = Marshal.GetDelegateForFunctionPointer<PresentDelegate>(presentOriginal);
-        _presentTarget = presentTarget;
-        _resizeBuffersDetour = ResizeBuffersHook;
-        IntPtr resizeBuffersDetourPtr = Marshal.GetFunctionPointerForDelegate(_resizeBuffersDetour);
-        MinHook.Ok(MinHook.CreateHook(resizeBuffersTarget, resizeBuffersDetourPtr, out IntPtr resizeBuffersOriginal), "MH_CreateHook(ResizeBuffers)");
-        MinHook.Ok(MinHook.EnableHook(resizeBuffersTarget), "MH_EnableHook(ResizeBuffers)");
-        _resizeBuffersOriginal = Marshal.GetDelegateForFunctionPointer<ResizeBuffersDelegate>(resizeBuffersOriginal);
-        _resizeBuffersTarget = resizeBuffersTarget;
     }
 
     public unsafe override void Dispose()
     {
-        if (_resizeBuffersTarget != IntPtr.Zero)
-        {
-            MinHook.DisableHook(_resizeBuffersTarget);
-            MinHook.RemoveHook(_resizeBuffersTarget);
-        }
-        if (_presentTarget != IntPtr.Zero)
-        {
-            MinHook.DisableHook(_presentTarget);
-            MinHook.RemoveHook(_presentTarget);
-        }
+        _resizeBuffers.Dispose();
+        _present.Dispose();
+        MinHook.Ok(MinHook.Uninitialize(), "MH_Uninitialize");
         foreach (ImGuiModule module in DearImGuiInjectionCore.MultiContextCompositor.Modules)
         {
             ImGui.SetCurrentContext(module.Context);
@@ -117,7 +98,7 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
         ImGui.DestroyPlatformWindows();
     }
 
-    private unsafe int PresentHook(IDXGISwapChain* g_pSwapChain, uint syncInterval, uint presentFlags)
+    private unsafe int PresentDetour(IDXGISwapChain* g_pSwapChain, uint syncInterval, uint presentFlags)
     {
         if (!IsInitialized)
         {
@@ -178,14 +159,14 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
             }
         }
         DearImGuiInjectionCore.MultiContextCompositor.PostEndFrameUpdateAll();
-        return _presentOriginal(g_pSwapChain, syncInterval, presentFlags);
+        return _present.Original(g_pSwapChain, syncInterval, presentFlags);
     }
 
-    private unsafe int ResizeBuffersHook(IDXGISwapChain* g_pSwapChain, uint bufferCount, uint width, uint height,
+    private unsafe int ResizeBuffersDetour(IDXGISwapChain* g_pSwapChain, uint bufferCount, uint width, uint height,
         Format newFormat, uint swapChainFlags)
     {
         CleanupRenderTarget();
-        int hr = _resizeBuffersOriginal(g_pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
+        int hr = _resizeBuffers.Original(g_pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
         CreateRenderTarget(g_pSwapChain);
         return hr;
     }

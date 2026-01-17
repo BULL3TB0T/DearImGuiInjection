@@ -40,9 +40,15 @@ public static class DearImGuiInjectionCore
 
     private static float DPIScale = -1;
 
-    internal static bool Init(ILoader loader, int graphicsDeviceType, string graphicsDeviceTypeName)
+    internal static bool Init(ILoader loader, int graphicsDeviceType, string graphicsDeviceTypeName, bool isOnWindows)
     {
         Loader = loader;
+        Log.Init(Loader);
+        if (!isOnWindows)
+        {
+            Log.Error("Unsupported OS: Windows required.");
+            return false;
+        }
         ConfigPath = Path.Combine(Loader.ConfigPath, "DearImGuiInjection");
         AssemblyPath = Loader.AssemblyPath;
         AssetsPath = Path.Combine(AssemblyPath, "Assets");
@@ -68,7 +74,6 @@ public static class DearImGuiInjectionCore
             pathToLibrary = null;
             return false;
         };
-        Log.Init(Loader);
         RendererKind rendererKind = graphicsDeviceType switch
         {
             2 => RendererKind.DX11,
@@ -79,18 +84,19 @@ public static class DearImGuiInjectionCore
         };
         if (rendererKind == RendererKind.None)
         {
-            Log.Error($"Unsupported graphics API: {graphicsDeviceTypeName} ({graphicsDeviceType})");
+            Log.Error($"Unsupported graphics API: {graphicsDeviceTypeName} ({graphicsDeviceType}).");
             return false;
         }
         ImGuiRenderer renderer = rendererKind switch
         {
             RendererKind.DX11 => new ImGuiDX11Renderer(),
             RendererKind.DX12 => new ImGuiDX12Renderer(),
+            RendererKind.Vulkan => new ImGuiVulkanRenderer(),
             _ => null
         };
         if (renderer == null)
         {
-            Log.Error($"Renderer {rendererKind} is not supported yet");
+            Log.Error($"Renderer {rendererKind} is supported but not implemented yet.");
             return false;
         }
         try
