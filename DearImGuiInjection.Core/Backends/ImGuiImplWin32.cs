@@ -123,6 +123,7 @@ internal static class ImGuiImplWin32
         io.BackendPlatformUserData = null;
         io.BackendFlags &= ~(ImGuiBackendFlags.HasMouseCursors | ImGuiBackendFlags.HasSetMousePos | ImGuiBackendFlags.HasGamepad);
         platform_io.ClearPlatformHandlers();
+        ImGui.DestroyPlatformWindows();
         ImGui.MemFree(bd);
     }
 

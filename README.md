@@ -3,8 +3,8 @@ Inject [Dear ImGui](https://github.com/ocornut/imgui) into any unity game.
 ## Renderers
 - DirectX 11
 - DirectX 12
+- Vulkan
 - ~~OpenGL~~
-- ~~Vulkan~~
 ## Mod Developers
 TO-DO
 ## Credits

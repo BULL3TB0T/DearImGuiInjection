@@ -50,6 +50,17 @@ public sealed class ImGuiMultiContextCompositor
         }
     }
 
+    private ImGuiModule FindModuleByContext(ImGuiContextPtr ctx)
+    {
+        for (int i = 0; i < Modules.Count; i++)
+        {
+            ImGuiModule module = Modules[i];
+            if (module.Context == ctx)
+                return module;
+        }
+        return null;
+    }
+
     private unsafe bool DragDropGetPayloadFromSourceContext()
     {
         ImGuiContextPtr src_ctx = _ctxDragDropSrc;
@@ -120,17 +131,6 @@ public sealed class ImGuiMultiContextCompositor
     {
         ImGui.MemFree(payload->Data);
         payload->Data = null;
-    }
-
-    private ImGuiModule FindModuleByContext(ImGuiContextPtr ctx)
-    {
-        for (int i = 0; i < Modules.Count; i++)
-        {
-            ImGuiModule module = Modules[i];
-            if (module.Context == ctx)
-                return module;
-        }
-        return null;
     }
 
     internal unsafe void PreNewFrameUpdateAll()

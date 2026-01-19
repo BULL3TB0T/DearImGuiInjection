@@ -118,6 +118,6 @@ internal static class MinHook
     public static void Ok(MH_STATUS status, string operation)
     {
         if (status != 0)
-            throw new InvalidOperationException($"{operation} failed (MinHook status={status}).");
+            throw new InvalidOperationException($"MinHook {operation} failed: {status}");
     }
 }

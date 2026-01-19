@@ -15,8 +15,6 @@ namespace DearImGuiInjection.Backends;
 
 internal static class ImGuiImplDX11
 {
-    private static D3DCompiler D3DCompiler;
-
     private static readonly IntPtr _entryMain = Marshal.StringToHGlobalAnsi("main");
 
     private const string _vertexShader =
@@ -83,7 +81,7 @@ internal static class ImGuiImplDX11
     // DirectX11 data
     private unsafe struct ImDrawCallback
     {
-        public static void* ResetRenderState = (void*)-8;
+        public static void* ResetRenderState = (void*)ImGui.ImDrawCallbackResetRenderState;
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void UserCallback(ImDrawList* parent_list, ImDrawCmd* cmd);
@@ -510,7 +508,7 @@ internal static class ImGuiImplDX11
         // Create the vertex shader
         {
             ID3D10Blob* vertexShaderBlob;
-            if (D3DCompiler.Compile((void*)_vsSrc, (nuint)_vertexShader.Length, (byte*)0, null, null, (byte*)_entryMain, (byte*)_vsTarget, 0, 0, &vertexShaderBlob, null) < 0)
+            if (SharedAPI.D3DCompiler.Compile((void*)_vsSrc, (nuint)_vertexShader.Length, (byte*)0, null, null, (byte*)_entryMain, (byte*)_vsTarget, 0, 0, &vertexShaderBlob, null) < 0)
                 return false; // NB: Pass ID3DBlob* pErrorBlob to D3DCompile() to get error showing in (const char*)pErrorBlob->GetBufferPointer(). Make sure to Release() the blob!
             if (bd->pd3dDevice->CreateVertexShader(vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize(), null, &bd->pVertexShader) != 0)
             {
@@ -544,7 +542,7 @@ internal static class ImGuiImplDX11
         // Create the pixel shader
         {
             ID3D10Blob* pixelShaderBlob;
-            if (D3DCompiler.Compile((void*)_psSrc, (nuint)_pixelShader.Length, (byte*)0, null, null, (byte*)_entryMain, (byte*)_psTarget, 0, 0, &pixelShaderBlob, null) < 0)
+            if (SharedAPI.D3DCompiler.Compile((void*)_psSrc, (nuint)_pixelShader.Length, (byte*)0, null, null, (byte*)_entryMain, (byte*)_psTarget, 0, 0, &pixelShaderBlob, null) < 0)
                 return false; // NB: Pass ID3DBlob* pErrorBlob to D3DCompile() to get error showing in (const char*)pErrorBlob->GetBufferPointer(). Make sure to Release() the blob!
             if (bd->pd3dDevice->CreatePixelShader(pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize(), null, &bd->pPixelShader) != 0)
             {
@@ -685,9 +683,6 @@ internal static class ImGuiImplDX11
         bd->pd3dDevice->AddRef();
         bd->pd3dDeviceContext = device_context;
         bd->pd3dDeviceContext->AddRef();
-
-        if (D3DCompiler == null)
-            D3DCompiler = D3DCompiler.GetApi();
 
         return true;
     }

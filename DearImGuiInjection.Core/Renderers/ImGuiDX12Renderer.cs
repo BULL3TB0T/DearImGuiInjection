@@ -2,6 +2,7 @@ using DearImGuiInjection.Backends;
 using DearImGuiInjection.Windows;
 using Hexa.NET.ImGui;
 using Silk.NET.Core.Native;
+using Silk.NET.Direct3D.Compilers;
 using Silk.NET.Direct3D12;
 using Silk.NET.DXGI;
 using System;
@@ -88,16 +89,15 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
     private MinHookDetour<ExecuteCommandListsDelegate> _executeCommandLists;
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private unsafe delegate void SrvAllocDelegate(ImGuiImplDX12.InitInfo* info, CpuDescriptorHandle* out_cpu_desc_handle, GpuDescriptorHandle* out_gpu_desc_handle);
-    private SrvAllocDelegate _srvAlloc;
+    private unsafe delegate void SrvDescriptorAllocDelegate(ImGuiImplDX12.InitInfo* info, CpuDescriptorHandle* out_cpu_desc_handle, GpuDescriptorHandle* out_gpu_desc_handle);
+    private SrvDescriptorAllocDelegate _srvDescriptorAlloc;
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private unsafe delegate void SrvFreeDelegate(ImGuiImplDX12.InitInfo* info, CpuDescriptorHandle cpu_desc_handle, GpuDescriptorHandle gpu_desc_handle);
-    private SrvFreeDelegate _srvFree;
+    private unsafe delegate void SrvDescriptorFreeDelegate(ImGuiImplDX12.InitInfo* info, CpuDescriptorHandle cpu_desc_handle, GpuDescriptorHandle gpu_desc_handle);
+    private SrvDescriptorFreeDelegate _srvDescriptorFree;
 
     private ImGuiImplDX12.InitInfo g_initInfo;
     private FrameContext[] g_frameContext;
-
     private unsafe ID3D12Device* g_pd3dDevice;
     private unsafe ID3D12DescriptorHeap* g_pd3dRtvDescHeap;
     private unsafe ID3D12DescriptorHeap* g_pd3dSrvDescHeap;
@@ -110,6 +110,8 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
 
     public unsafe override void Init()
     {
+        SharedAPI.D3D12 = D3D12.GetApi();
+        SharedAPI.D3DCompiler = D3DCompiler.GetApi();
         IntPtr windowHandle = User32.CreateFakeWindow();
         SwapChainDesc1 sd = new SwapChainDesc1
         {
@@ -126,7 +128,7 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
         };
         Guid riid = ID3D12Device.Guid;
         ID3D12Device* pd3dDevice;
-        int res = D3D12.GetApi().CreateDevice(null, D3DFeatureLevel.Level110, &riid, (void**)&pd3dDevice);
+        int res = SharedAPI.D3D12.CreateDevice(null, D3DFeatureLevel.Level110, &riid, (void**)&pd3dDevice);
         if (res != 0)
             throw new InvalidOperationException($"CreateDevice failed: 0x{res:X8}");
         riid = ID3D12CommandQueue.Guid;
@@ -214,19 +216,17 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
         if (isInitialized)
             ImGuiImplDX12.Shutdown();
         ImGuiImplWin32.Shutdown();
-        ImGui.DestroyPlatformWindows();
     }
 
     private unsafe int Present1Detour(IDXGISwapChain3* g_pSwapChain, uint syncInterval, uint presentFlags, PresentParameters* presentParameters)
     {
         if (g_pd3dCommandQueue == null)
             return _present1.Original(g_pSwapChain, syncInterval, presentFlags, presentParameters);
-        if (!IsInitialized)
+        if (CanAttachWindowHandle())
         {
-            SwapChainDesc sd;
-            g_pSwapChain->GetDesc(&sd);
+            SwapChainDesc1 sd;
+            g_pSwapChain->GetDesc1(&sd);
             uint bufferCount = sd.BufferCount;
-            IntPtr windowHandle = sd.OutputWindow;
             Guid riid = IDXGISwapChain1.Guid;
             IDXGISwapChain1* swapChain1;
             g_pSwapChain->QueryInterface(&riid, (void**)&swapChain1);
@@ -290,11 +290,11 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
             g_pd3dDevice->CreateFence(0, FenceFlags.None, &riid, (void**)&fence);
             g_fence = fence;
             g_fenceEvent = Kernel32.CreateEvent(IntPtr.Zero, false, false, IntPtr.Zero);
-            _srvAlloc = (ImGuiImplDX12.InitInfo* info, CpuDescriptorHandle* out_cpu_desc_handle, GpuDescriptorHandle* out_gpu_desc_handle) =>
+            _srvDescriptorAlloc = (ImGuiImplDX12.InitInfo* info, CpuDescriptorHandle* out_cpu_desc_handle, GpuDescriptorHandle* out_gpu_desc_handle) =>
             {
                 g_pd3dSrvDescHeapAlloc.Alloc(out_cpu_desc_handle, out_gpu_desc_handle);
             };
-            _srvFree = (ImGuiImplDX12.InitInfo* info, CpuDescriptorHandle cpu_desc_handle, GpuDescriptorHandle gpu_desc_handle) =>
+            _srvDescriptorFree = (ImGuiImplDX12.InitInfo* info, CpuDescriptorHandle cpu_desc_handle, GpuDescriptorHandle gpu_desc_handle) =>
             {
                 g_pd3dSrvDescHeapAlloc.Free(cpu_desc_handle, gpu_desc_handle);
             };
@@ -306,10 +306,9 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
                 RTVFormat = Format.FormatR8G8B8A8Unorm,
                 DSVFormat = Format.FormatUnknown,
                 SrvDescriptorHeap = g_pd3dSrvDescHeap,
-                SrvDescriptorAllocFn = (delegate* unmanaged[Cdecl]<ImGuiImplDX12.InitInfo*, CpuDescriptorHandle*, GpuDescriptorHandle*, void>)Marshal.GetFunctionPointerForDelegate(_srvAlloc),
-                SrvDescriptorFreeFn = (delegate* unmanaged[Cdecl]<ImGuiImplDX12.InitInfo*, CpuDescriptorHandle, GpuDescriptorHandle, void>)Marshal.GetFunctionPointerForDelegate(_srvFree),
+                SrvDescriptorAllocFn = (delegate* unmanaged[Cdecl]<ImGuiImplDX12.InitInfo*, CpuDescriptorHandle*, GpuDescriptorHandle*, void>)Marshal.GetFunctionPointerForDelegate(_srvDescriptorAlloc),
+                SrvDescriptorFreeFn = (delegate* unmanaged[Cdecl]<ImGuiImplDX12.InitInfo*, CpuDescriptorHandle, GpuDescriptorHandle, void>)Marshal.GetFunctionPointerForDelegate(_srvDescriptorFree)
             };
-            AttachToWindow(windowHandle);
             CreateRenderTarget(g_pSwapChain);
         }
         DearImGuiInjectionCore.MultiContextCompositor.PreNewFrameUpdateAll();
@@ -365,7 +364,7 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
                 g_pd3dCommandList->ResourceBarrier(1, &barrier);
                 g_pd3dCommandList->OMSetRenderTargets(1, ref frameCtx.MainRenderTargetDescriptor, false, null);
                 g_pd3dCommandList->SetDescriptorHeaps(1, ref g_pd3dSrvDescHeap);
-                ImGuiImplDX12.RenderDrawData(ImGui.GetDrawData().Handle, g_pd3dCommandList);
+                ImGuiImplDX12.RenderDrawData(ImGui.GetDrawData(), g_pd3dCommandList);
                 barrier.Transition = new ResourceTransitionBarrier
                 {
                     PResource = frameCtx.MainRenderTargetResource,

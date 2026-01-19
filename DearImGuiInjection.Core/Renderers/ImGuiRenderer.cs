@@ -17,9 +17,9 @@ public enum RendererKind
 
 internal abstract class ImGuiRenderer
 {
-    public bool IsInitialized { get; private set; }
     public IntPtr WindowHandle { get; private set; }
     private User32.WndProcDelegate WindowProc;
+    private IntPtr CurrentWindowProc;
     private IntPtr OriginalWindowProc;
 
     public abstract void Init();
@@ -28,19 +28,22 @@ internal abstract class ImGuiRenderer
 
     internal void DisposeAndUnhook()
     {
-        //DearImGuiInjectionCore.TextureManager.Dispose();
         Dispose();
-        if (!IsInitialized)
+        if (WindowHandle == IntPtr.Zero)
             return;
-        User32.SetWindowLong(WindowHandle, User32.GWL_WNDPROC, OriginalWindowProc);
+        if (User32.GetWindowLong(WindowHandle, User32.GWL_WNDPROC) == CurrentWindowProc && OriginalWindowProc != IntPtr.Zero)
+            User32.SetWindowLong(WindowHandle, User32.GWL_WNDPROC, OriginalWindowProc);
+        CurrentWindowProc = IntPtr.Zero;
         OriginalWindowProc = IntPtr.Zero;
         WindowProc = null;
         WindowHandle = IntPtr.Zero;
     }
 
-    internal void AttachToWindow(IntPtr windowHandle)
+    internal bool CanAttachWindowHandle()
     {
-        WindowHandle = windowHandle;
+        if (WindowHandle != IntPtr.Zero)
+            return false;
+        WindowHandle = GetMainWindowHandle();
         WindowProc = new User32.WndProcDelegate((IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam) =>
         {
             bool IsKeyUpMsg() => uMsg == WindowMessage.WM_KEYUP || uMsg == WindowMessage.WM_SYSKEYUP;
@@ -106,8 +109,36 @@ internal abstract class ImGuiRenderer
                 return result;
             return User32.CallWindowProc(OriginalWindowProc, hWnd, uMsg, wParam, lParam);
         });
-        OriginalWindowProc = User32.SetWindowLong(WindowHandle, User32.GWL_WNDPROC,
-            Marshal.GetFunctionPointerForDelegate(WindowProc));
-        IsInitialized = true;
+        CurrentWindowProc = Marshal.GetFunctionPointerForDelegate(WindowProc);
+        OriginalWindowProc = User32.SetWindowLong(WindowHandle, User32.GWL_WNDPROC, CurrentWindowProc);
+        return true;
+    }
+
+    private static IntPtr GetMainWindowHandle()
+    {
+        uint pid = Kernel32.GetCurrentProcessId();
+        IntPtr best = IntPtr.Zero;
+        int bestArea = -1;
+        User32.EnumWindows((hwnd, _) =>
+        {
+            User32.GetWindowThreadProcessId(hwnd, out uint wpid);
+            if (wpid != pid)
+                return true;
+            if (!User32.IsWindowVisible(hwnd))
+                return true;
+            if (!User32.GetClientRect(hwnd, out RECT r))
+                return true;
+            int w = r.Right - r.Left;
+            int h = r.Bottom - r.Top;
+            if (w == 0 || h == 0) return true;
+            int area = w * h;
+            if (area > bestArea)
+            {
+                bestArea = area;
+                best = hwnd;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return best;
     }
 }

@@ -3,6 +3,7 @@ using DearImGuiInjection.Textures;
 using DearImGuiInjection.Windows;
 using Hexa.NET.ImGui;
 using Silk.NET.Core.Native;
+using Silk.NET.Direct3D.Compilers;
 using Silk.NET.Direct3D11;
 using Silk.NET.DXGI;
 using System;
@@ -27,6 +28,8 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
 
     public unsafe override void Init()
     {
+        SharedAPI.D3D11 = D3D11.GetApi(null);
+        SharedAPI.D3DCompiler = D3DCompiler.GetApi();
         IntPtr windowHandle = User32.CreateFakeWindow();
         SwapChainDesc sd = new SwapChainDesc
         {
@@ -55,11 +58,10 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
         };
         D3DFeatureLevel* featureLevel = null;
         ID3D11DeviceContext* deviceContext = null;
-        D3D11 API = D3D11.GetApi(null);
-        int res = API.CreateDeviceAndSwapChain(null, D3DDriverType.Hardware, 0, createDeviceFlags, featureLevelArray,
+        int res = SharedAPI.D3D11.CreateDeviceAndSwapChain(null, D3DDriverType.Hardware, 0, createDeviceFlags, featureLevelArray,
             FeatureLevels, D3D11.SdkVersion, &sd, &swapChain, &device, featureLevel, &deviceContext);
         if (res == unchecked((int)0x887A0004)) // DXGI_ERROR_UNSUPPORTED
-            res = API.CreateDeviceAndSwapChain(null, D3DDriverType.Warp, 0, createDeviceFlags, featureLevelArray,
+            res = SharedAPI.D3D11.CreateDeviceAndSwapChain(null, D3DDriverType.Warp, 0, createDeviceFlags, featureLevelArray,
                 FeatureLevels, D3D11.SdkVersion, &sd, &swapChain, &device, featureLevel, &deviceContext);
         if (res != 0)
             throw new InvalidOperationException($"CreateDeviceAndSwapChain failed: 0x{res:X8}");
@@ -95,25 +97,19 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
         if (isInitialized)
             ImGuiImplDX11.Shutdown();
         ImGuiImplWin32.Shutdown();
-        ImGui.DestroyPlatformWindows();
     }
 
     private unsafe int PresentDetour(IDXGISwapChain* g_pSwapChain, uint syncInterval, uint presentFlags)
     {
-        if (!IsInitialized)
+        if (CanAttachWindowHandle())
         {
             Guid riid = ID3D11Device.Guid;
             ID3D11Device* device = null;
             g_pSwapChain->GetDevice(&riid, (void**)&device);
             g_pd3dDevice = device;
             g_pd3dDevice->GetImmediateContext(ref g_pd3dDeviceContext);
-            SwapChainDesc sd;
-            g_pSwapChain->GetDesc(&sd);
-            AttachToWindow(sd.OutputWindow);
-            //DearImGuiInjectionCore.TextureManager = new DX11TextureManager(g_pd3dDevice);
             CreateRenderTarget(g_pSwapChain);
         }
-        //DearImGuiInjectionCore.TextureManager.Update();
         DearImGuiInjectionCore.MultiContextCompositor.PreNewFrameUpdateAll();
         for (int i = DearImGuiInjectionCore.MultiContextCompositor.ModulesFrontToBack.Count - 1; i >= 0; i--)
         {
@@ -149,7 +145,7 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
                 module.OnRender();
                 ImGui.Render();
                 g_pd3dDeviceContext->OMSetRenderTargets(1, ref g_mainRenderTargetView, null);
-                ImGuiImplDX11.RenderDrawData(ImGui.GetDrawData().Handle);
+                ImGuiImplDX11.RenderDrawData(ImGui.GetDrawData());
             }
             catch (Exception e)
             {

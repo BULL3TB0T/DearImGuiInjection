@@ -19,9 +19,6 @@ internal static class ImGuiImplDX12
 {
     private const uint D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING = 5768;
 
-    private static D3D12 API;
-    private static D3DCompiler D3DCompiler;
-
     private static readonly IntPtr _entryMain = Marshal.StringToHGlobalAnsi("main");
 
     private const string _vertexShader =
@@ -105,7 +102,7 @@ internal static class ImGuiImplDX12
     // DirectX12 data
     private unsafe struct ImDrawCallback
     {
-        public static void* ResetRenderState = (void*)-8;
+        public static void* ResetRenderState = (void*)ImGui.ImDrawCallbackResetRenderState;
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void UserCallback(ImDrawList* parent_list, ImDrawCmd* cmd);
@@ -389,7 +386,7 @@ internal static class ImGuiImplDX12
 
                     // Bind texture, Draw
                     GpuDescriptorHandle texture_handle = default;
-                    texture_handle.Ptr = (ulong)pcmd->GetTexID();
+                    texture_handle.Ptr = pcmd->GetTexID();
                     command_list->SetGraphicsRootDescriptorTable(1, texture_handle);
                     command_list->DrawIndexedInstanced(pcmd->ElemCount, 1, pcmd->IdxOffset + (uint)global_idx_offset, (int)pcmd->VtxOffset + global_vtx_offset, 0);
                 }
@@ -405,7 +402,7 @@ internal static class ImGuiImplDX12
         Texture* backend_tex = (Texture*)tex->BackendUserData;
         if (backend_tex != null)
         {
-            if (backend_tex->hFontSrvGpuDescHandle.Ptr != (ulong)tex->GetTexID())
+            if (backend_tex->hFontSrvGpuDescHandle.Ptr != tex->GetTexID())
                 throw new InvalidOperationException("Texture ID mismatch while destroying texture.");
             Data* bd = GetBackendData();
             bd->InitInfo.SrvDescriptorFreeFn(&bd->InitInfo, backend_tex->hFontSrvCpuDescHandle, backend_tex->hFontSrvGpuDescHandle);
@@ -744,7 +741,7 @@ internal static class ImGuiImplDX12
         };
 
         ID3D10Blob* blob = null;
-        if (API.SerializeRootSignature(&desc, D3DRootSignatureVersion.Version1, &blob, null) != 0)
+        if (SharedAPI.D3D12.SerializeRootSignature(&desc, D3DRootSignatureVersion.Version1, &blob, null) != 0)
             return false;
 
         Guid riid = ID3D12RootSignature.Guid;
@@ -774,7 +771,7 @@ internal static class ImGuiImplDX12
 
         // Create the vertex shader
         {
-            if (D3DCompiler.Compile((void*)_vsSrc, (nuint)_vertexShader.Length, (byte*)0, null, null, (byte*)_entryMain, (byte*)_vsTarget, 0, 0, &vertexShaderBlob, null) < 0)
+            if (SharedAPI.D3DCompiler.Compile((void*)_vsSrc, (nuint)_vertexShader.Length, (byte*)0, null, null, (byte*)_entryMain, (byte*)_vsTarget, 0, 0, &vertexShaderBlob, null) < 0)
                 return false; // NB: Pass ID3DBlob* pErrorBlob to D3DCompile() to get error showing in (const char*)pErrorBlob->GetBufferPointer(). Make sure to Release() the blob!
 
             psoDesc.VS = new ShaderBytecode
@@ -794,7 +791,7 @@ internal static class ImGuiImplDX12
 
         // Create the pixel shader
         {
-            if (D3DCompiler.Compile((void*)_psSrc, (nuint)_pixelShader.Length, (byte*)0, null, null, (byte*)_entryMain, (byte*)_psTarget, 0, 0, &pixelShaderBlob, null) < 0)
+            if (SharedAPI.D3DCompiler.Compile((void*)_psSrc, (nuint)_pixelShader.Length, (byte*)0, null, null, (byte*)_entryMain, (byte*)_psTarget, 0, 0, &pixelShaderBlob, null) < 0)
             {
                 vertexShaderBlob->Release();
                 return false; // NB: Pass ID3DBlob* pErrorBlob to D3DCompile() to get error showing in (const char*)pErrorBlob->GetBufferPointer(). Make sure to Release() the blob!
@@ -981,11 +978,6 @@ internal static class ImGuiImplDX12
             fr->IndexBufferSize = 10000;
             fr->VertexBufferSize = 5000;
         }
-
-        if (API == null)
-            API = D3D12.GetApi();
-        if (D3DCompiler == null)
-            D3DCompiler = D3DCompiler.GetApi();
 
         return true;
     }

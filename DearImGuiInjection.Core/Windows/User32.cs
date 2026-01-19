@@ -604,6 +604,8 @@ internal static class User32
     public delegate IntPtr WndProcDelegate(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam);
     private static readonly WndProcDelegate s_WndProc = DefWindowProcW;
 
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
     [DllImport(Dll)]
     public static extern IntPtr GetKeyboardLayout(uint idThread);
 
@@ -640,6 +642,15 @@ internal static class User32
 
     [DllImport(Dll)]
     public static extern IntPtr GetForegroundWindow();
+
+    [DllImport(Dll)]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport(Dll)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport(Dll)]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     [DllImport(Dll, SetLastError = false)]
     public static extern IntPtr GetMessageExtraInfo();
@@ -685,18 +696,23 @@ internal static class User32
     [DllImport(Dll)]
     public static extern bool SetProcessDPIAware();
 
+    [DllImport(Dll, EntryPoint = "GetWindowLong")]
+    private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+    [DllImport(Dll, EntryPoint = "GetWindowLongPtr")]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    public static IntPtr GetWindowLong(IntPtr hWnd, int nIndex) =>
+        IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, nIndex) : new IntPtr(GetWindowLong32(hWnd, nIndex));
+
     [DllImport(Dll, EntryPoint = "SetWindowLong")]
     public static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
 
     [DllImport(Dll, EntryPoint = "SetWindowLongPtr")]
     public static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 
-    public static IntPtr SetWindowLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
-    {
-        if (IntPtr.Size == 8)
-            return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
-        return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
-    }
+    public static IntPtr SetWindowLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong) =>
+        IntPtr.Size == 8 ? SetWindowLongPtr64(hWnd, nIndex, dwNewLong) : new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
 
     [DllImport(Dll, CallingConvention = CallingConvention.Winapi)]
     public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);

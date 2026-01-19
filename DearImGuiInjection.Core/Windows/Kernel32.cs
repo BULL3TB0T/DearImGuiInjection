@@ -8,6 +8,9 @@ internal static class Kernel32
 {
     private const string Dll = "kernel32.dll";
 
+    [DllImport(Dll, SetLastError = true)]
+    public static extern uint GetCurrentProcessId();
+
     [DllImport(Dll, CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern IntPtr GetModuleHandle([MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
 

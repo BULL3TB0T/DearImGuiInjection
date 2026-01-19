@@ -136,6 +136,7 @@ public static class DearImGuiInjectionCore
             module.OnInit = null;
             module.OnRender = null;
         }
+        //DearImGuiInjectionCore.TextureManager.Dispose();
         Renderer?.DisposeAndUnhook();
         Renderer = null;
         foreach (ImGuiModule module in MultiContextCompositor.Modules)
@@ -168,7 +169,7 @@ public static class DearImGuiInjectionCore
         return module;
     }
 
-    public static void DestroyModule(string Id)
+    public unsafe static void DestroyModule(string Id)
     {
         ImGuiModule module = MultiContextCompositor.Modules.FirstOrDefault(x => x.Id == Id);
         if (string.IsNullOrWhiteSpace(Id) || module == null)
@@ -188,6 +189,9 @@ public static class DearImGuiInjectionCore
             Log.Error($"Module \"{module.Id}\" OnDispose threw an exception: {e}");
         }
         module.OnDispose = null;
+        IntPtr iniFilename = (IntPtr)module.IO.IniFilename;
+        if (iniFilename != IntPtr.Zero)
+            Marshal.FreeHGlobal(iniFilename);
         ImGui.DestroyContext();
     }
 }
