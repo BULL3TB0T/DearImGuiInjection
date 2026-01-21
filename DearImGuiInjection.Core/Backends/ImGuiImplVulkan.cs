@@ -56,14 +56,6 @@ internal static class ImGuiImplVulkan
         public ShaderModuleCreateInfo CustomShaderFragCreateInfo;
     }
 
-    private unsafe struct ImDrawCallback
-    {
-        public static void* ResetRenderState = (void*)ImGui.ImDrawCallbackResetRenderState;
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void UserCallback(ImDrawList* parent_list, ImDrawCmd* cmd);
-    }
-
     internal struct PipelineInfo
     {
         public RenderPass RenderPass;
@@ -484,7 +476,7 @@ internal static class ImGuiImplVulkan
                 {
                     // User callback, registered via ImDrawList::AddCallback()
                     // (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
-                    if (pcmd->UserCallback == ImDrawCallback.ResetRenderState)
+                    if (pcmd->UserCallback == (void*)ImGui.ImDrawCallbackResetRenderState)
                         SetupRenderState(draw_data, pipeline, command_buffer, rb, fb_width, fb_height);
                     else
                         ((delegate* unmanaged[Cdecl]<ImDrawList*, ImDrawCmd*, void>)pcmd->UserCallback)(draw_list, pcmd);
@@ -597,7 +589,7 @@ internal static class ImGuiImplVulkan
                 throw new InvalidOperationException("Expected TexID to be null and BackendUserData to be null.");
             if (tex->Format != ImTextureFormat.Rgba32)
                 throw new InvalidOperationException("Expected texture format RGBA32.");
-            Texture* backend_tex = (Texture*)ImGui.MemAlloc((uint)sizeof(Texture));
+            Texture* backend_tex = (Texture*)ImGui.MemAlloc((nuint)sizeof(Texture));
             *backend_tex = default;
 
             // Create the Image:
@@ -1211,7 +1203,7 @@ internal static class ImGuiImplVulkan
             throw new InvalidOperationException("Already initialized a renderer backend!");
 
         // Setup backend capabilities flags
-        Data* bd = (Data*)ImGui.MemAlloc((uint)sizeof(Data));
+        Data* bd = (Data*)ImGui.MemAlloc((nuint)sizeof(Data));
         *bd = new();
         io.BackendRendererUserData = bd;
         io.BackendRendererName = (byte*)Marshal.StringToHGlobalAnsi($"imgui_impl_vulkan_{DearImGuiInjectionCore.BackendVersion}");

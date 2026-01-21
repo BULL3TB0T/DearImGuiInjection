@@ -14,11 +14,11 @@ namespace DearImGuiInjection.Renderers;
 
 internal sealed class ImGuiDX11Renderer : ImGuiRenderer
 {
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private unsafe delegate int PresentDelegate(IDXGISwapChain* swapChain, uint syncInterval, uint presentFlags);
     private MinHookDetour<PresentDelegate> _present;
 
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private unsafe delegate int ResizeBuffersDelegate(IDXGISwapChain* swapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapChainFlags);
     private MinHookDetour<ResizeBuffersDelegate> _resizeBuffers;
 
@@ -158,8 +158,7 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
         return _present.Original(g_pSwapChain, syncInterval, presentFlags);
     }
 
-    private unsafe int ResizeBuffersDetour(IDXGISwapChain* g_pSwapChain, uint bufferCount, uint width, uint height,
-        Format newFormat, uint swapChainFlags)
+    private unsafe int ResizeBuffersDetour(IDXGISwapChain* g_pSwapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapChainFlags)
     {
         CleanupRenderTarget();
         int hr = _resizeBuffers.Original(g_pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
@@ -180,6 +179,8 @@ internal sealed class ImGuiDX11Renderer : ImGuiRenderer
             g_pd3dDevice->Release();
             g_pd3dDevice = null;
         }
+        SharedAPI.D3DCompiler.Dispose();
+        SharedAPI.D3D11.Dispose();
     }
 
     private unsafe void CreateRenderTarget(IDXGISwapChain* g_pSwapChain)

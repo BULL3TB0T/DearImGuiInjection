@@ -20,23 +20,23 @@ public static class DearImGuiInjectionCore
 {
     internal const string BackendVersion = "unity_hexa_net (v2.2.11-pre)";
 
-    public static LoaderKind LoaderKind => Loader?.Kind ?? LoaderKind.None;
-    public static RendererKind RendererKind = RendererKind.None;
-
-    public static string ConfigPath { get; private set; }
-    public static string AssemblyPath { get; private set; }
-    public static string AssetsPath { get; private set; }
+    public static ITextureManager TextureManager;
+    public static ImGuiMultiContextCompositor MultiContextCompositor;
 
     public static IConfigEntry<bool> ShowDemoWindow;
     public static IConfigEntry<bool> EnableDpiAwareness;
     public static IConfigEntry<bool> AllowUpMessages;
     public static IConfigEntry<bool> MouseDrawCursor;
 
-    public static ITextureManager TextureManager;
-    public static ImGuiMultiContextCompositor MultiContextCompositor;
+    private static ImGuiRenderer Renderer;
+    private static RendererKind _rendererKind = RendererKind.None;
+    public static RendererKind RendererKind => _rendererKind;
 
     private static ILoader Loader;
-    private static ImGuiRenderer Renderer;
+    public static LoaderKind LoaderKind => Loader?.Kind ?? LoaderKind.None;
+    public static string ConfigPath { get; private set; }
+    public static string AssemblyPath { get; private set; }
+    public static string AssetsPath { get; private set; }
 
     private static float DPIScale = -1;
 
@@ -79,7 +79,9 @@ public static class DearImGuiInjectionCore
             2 => RendererKind.DX11,
             18 => RendererKind.DX12,
             21 => RendererKind.Vulkan,
-            17 => RendererKind.OpenGL,
+            8 => RendererKind.OpenGLES2,
+            11 => RendererKind.OpenGLES3,
+            17 => RendererKind.OpenGLCore,
             _ => RendererKind.None
         };
         if (rendererKind == RendererKind.None)
@@ -92,6 +94,9 @@ public static class DearImGuiInjectionCore
             RendererKind.DX11 => new ImGuiDX11Renderer(),
             RendererKind.DX12 => new ImGuiDX12Renderer(),
             RendererKind.Vulkan => new ImGuiVulkanRenderer(),
+            RendererKind.OpenGLES2 => new ImGuiOpenGLRenderer(),
+            RendererKind.OpenGLES3 => new ImGuiOpenGLRenderer(),
+            RendererKind.OpenGLCore => new ImGuiOpenGLRenderer(),
             _ => null
         };
         if (renderer == null)
@@ -104,7 +109,7 @@ public static class DearImGuiInjectionCore
             renderer.Init();
             Log.Info($"Renderer {rendererKind} Init()");
             Renderer = renderer;
-            RendererKind = rendererKind;
+            _rendererKind = rendererKind;
         }
         catch (Exception e)
         {

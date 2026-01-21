@@ -21,32 +21,30 @@ internal static class ImGuiImplDX12
 
     private static readonly IntPtr _entryMain = Marshal.StringToHGlobalAnsi("main");
 
-    private const string _vertexShader =
-        @"cbuffer vertexBuffer : register(b0) \
-        {\
-            float4x4 ProjectionMatrix; \
-        };\
-        struct VS_INPUT\
-        {\
-            float2 pos : POSITION;\
-            float4 col : COLOR0;\
-            float2 uv  : TEXCOORD0;\
-        };\
-        \
-        struct PS_INPUT\
-        {\
-            float4 pos : SV_POSITION;\
-            float4 col : COLOR0;\
-            float2 uv  : TEXCOORD0;\
-        };\
-        \
-        PS_INPUT main(VS_INPUT input)\
-        {\
-            PS_INPUT output;\
-            output.pos = mul( ProjectionMatrix, float4(input.pos.xy, 0.f, 1.f));\
-            output.col = input.col;\
-            output.uv  = input.uv;\
-            return output;\
+    private const string _vertexShader = @"
+        cbuffer vertexBuffer : register(b0)
+        {
+            float4x4 ProjectionMatrix;
+        };
+        struct VS_INPUT
+        {
+            float2 pos : POSITION;
+            float4 col : COLOR0;
+            float2 uv  : TEXCOORD0;
+        };
+        struct PS_INPUT
+        {
+            float4 pos : SV_POSITION;
+            float4 col : COLOR0;
+            float2 uv  : TEXCOORD0;
+        };
+        PS_INPUT main(VS_INPUT input)
+        {
+            PS_INPUT output;
+            output.pos = mul(ProjectionMatrix, float4(input.pos.xy, 0.f, 1.f));
+            output.col = input.col;
+            output.uv  = input.uv;
+            return output;
         }";
     private static readonly IntPtr _vsSrc = Marshal.StringToHGlobalAnsi(_vertexShader);
     private static readonly IntPtr _vsTarget = Marshal.StringToHGlobalAnsi("vs_5_0");
@@ -64,20 +62,19 @@ internal static class ImGuiImplDX12
             (uint)Marshal.OffsetOf<ImDrawVert>(nameof(ImDrawVert.Col)), InputClassification.PerVertexData, 0),
     };
 
-    private const string _pixelShader =
-        @"struct PS_INPUT\
-        {\
-            float4 pos : SV_POSITION;\
-            float4 col : COLOR0;\
-            float2 uv  : TEXCOORD0;\
-        };\
-        SamplerState sampler0 : register(s0);\
-        Texture2D texture0 : register(t0);\
-        \
-        float4 main(PS_INPUT input) : SV_Target\
-        {\
-            float4 out_col = input.col * texture0.Sample(sampler0, input.uv); \
-            return out_col; \
+    private const string _pixelShader = @"
+        struct PS_INPUT
+        {
+            float4 pos : SV_POSITION;
+            float4 col : COLOR0;
+            float2 uv  : TEXCOORD0;
+        };
+        SamplerState sampler0 : register(s0);
+        Texture2D texture0 : register(t0);
+        float4 main(PS_INPUT input) : SV_Target
+        {
+            float4 out_col = input.col * texture0.Sample(sampler0, input.uv);
+            return out_col;
         }";
     private static readonly IntPtr _psSrc = Marshal.StringToHGlobalAnsi(_pixelShader);
     private static readonly IntPtr _psTarget = Marshal.StringToHGlobalAnsi("ps_5_0");
@@ -100,14 +97,6 @@ internal static class ImGuiImplDX12
     }
 
     // DirectX12 data
-    private unsafe struct ImDrawCallback
-    {
-        public static void* ResetRenderState = (void*)ImGui.ImDrawCallbackResetRenderState;
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void UserCallback(ImDrawList* parent_list, ImDrawCmd* cmd);
-    }
-
     private unsafe struct RenderState
     {
         public ID3D12Device* Device;
@@ -159,14 +148,6 @@ internal static class ImGuiImplDX12
     // It is STRONGLY preferred that you use docking branch with multi-viewports (== single Dear ImGui context + multiple windows) instead of multiple Dear ImGui contexts.
     private unsafe static Data* GetBackendData() => (Data*)ImGui.GetIO().BackendRendererUserData;
 
-    private unsafe struct VERTEX_CONSTANT_BUFFER
-    {
-        public const int ElementCount = 4 * 4;
-        public const int ByteWidth = ElementCount * sizeof(float);
-
-        public fixed float mvp[ElementCount];
-    }
-
     // Functions
     private unsafe static void SetupRenderState(ImDrawData* draw_data, ID3D12GraphicsCommandList* command_list, RenderBuffers* fr)
     {
@@ -174,20 +155,20 @@ internal static class ImGuiImplDX12
 
         // Setup orthographic projection matrix into our constant buffer
         // Our visible imgui space lies from draw_data->DisplayPos (top left) to draw_data->DisplayPos+data_data->DisplaySize (bottom right).
-        VERTEX_CONSTANT_BUFFER vertex_constant_buffer;
+        ImGuiImpl.VERTEX_CONSTANT_BUFFER vertex_constant_buffer;
         {
             float L = draw_data->DisplayPos.X;
             float R = draw_data->DisplayPos.X + draw_data->DisplaySize.X;
             float T = draw_data->DisplayPos.Y;
             float B = draw_data->DisplayPos.Y + draw_data->DisplaySize.Y;
-            float* mvp = stackalloc float[VERTEX_CONSTANT_BUFFER.ElementCount]
+            float* mvp = stackalloc float[ImGuiImpl.VERTEX_CONSTANT_BUFFER.ElementCount]
             {
                 2.0f/(R-L),   0.0f,           0.0f,       0.0f,
                 0.0f,         2.0f/(T-B),     0.0f,       0.0f,
                 0.0f,         0.0f,           0.5f,       0.0f,
                 (R+L)/(L-R),  (T+B)/(B-T),    0.5f,       1.0f,
             };
-            Buffer.MemoryCopy(mvp, vertex_constant_buffer.mvp, VERTEX_CONSTANT_BUFFER.ByteWidth, VERTEX_CONSTANT_BUFFER.ByteWidth);
+            Buffer.MemoryCopy(mvp, vertex_constant_buffer.mvp, ImGuiImpl.VERTEX_CONSTANT_BUFFER.ByteWidth, ImGuiImpl.VERTEX_CONSTANT_BUFFER.ByteWidth);
         }
 
         // Setup viewport
@@ -367,7 +348,7 @@ internal static class ImGuiImplDX12
                 {
                     // User callback, registered via ImDrawList::AddCallback()
                     // (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
-                    if (pcmd->UserCallback == ImDrawCallback.ResetRenderState)
+                    if (pcmd->UserCallback == (void*)ImGui.ImDrawCallbackResetRenderState)
                         SetupRenderState(draw_data, command_list, fr);
                     else
                         ((delegate* unmanaged[Cdecl]<ImDrawList*, ImDrawCmd*, void>)pcmd->UserCallback)(draw_list, pcmd);
@@ -944,7 +925,7 @@ internal static class ImGuiImplDX12
             throw new InvalidOperationException("Already initialized a renderer backend!");
 
         // Setup backend capabilities flags
-        Data* bd = (Data*)ImGui.MemAlloc((uint)sizeof(Data));
+        Data* bd = (Data*)ImGui.MemAlloc((nuint)sizeof(Data));
         *bd = default;
         bd->InitInfo = *init_info; // Deep copy
         init_info = &bd->InitInfo;

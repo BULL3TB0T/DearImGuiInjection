@@ -12,7 +12,9 @@ public enum RendererKind
     DX11,
     DX12,
     Vulkan,
-    OpenGL
+    OpenGLES2,
+    OpenGLES3,
+    OpenGLCore
 }
 
 internal abstract class ImGuiRenderer
@@ -28,22 +30,22 @@ internal abstract class ImGuiRenderer
 
     internal void DisposeAndUnhook()
     {
+        if (WindowHandle != IntPtr.Zero)
+        {
+            if (User32.GetWindowLong(WindowHandle, User32.GWL_WNDPROC) == CurrentWindowProc && OriginalWindowProc != IntPtr.Zero)
+                User32.SetWindowLong(WindowHandle, User32.GWL_WNDPROC, OriginalWindowProc);
+            CurrentWindowProc = IntPtr.Zero;
+            OriginalWindowProc = IntPtr.Zero;
+            WindowProc = null;
+            WindowHandle = IntPtr.Zero;
+        }
         Dispose();
-        if (WindowHandle == IntPtr.Zero)
-            return;
-        if (User32.GetWindowLong(WindowHandle, User32.GWL_WNDPROC) == CurrentWindowProc && OriginalWindowProc != IntPtr.Zero)
-            User32.SetWindowLong(WindowHandle, User32.GWL_WNDPROC, OriginalWindowProc);
-        CurrentWindowProc = IntPtr.Zero;
-        OriginalWindowProc = IntPtr.Zero;
-        WindowProc = null;
-        WindowHandle = IntPtr.Zero;
     }
 
     internal bool CanAttachWindowHandle()
     {
         if (WindowHandle != IntPtr.Zero)
             return false;
-        WindowHandle = GetMainWindowHandle();
         WindowProc = new User32.WndProcDelegate((IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam) =>
         {
             bool IsKeyUpMsg() => uMsg == WindowMessage.WM_KEYUP || uMsg == WindowMessage.WM_SYSKEYUP;
@@ -110,6 +112,7 @@ internal abstract class ImGuiRenderer
             return User32.CallWindowProc(OriginalWindowProc, hWnd, uMsg, wParam, lParam);
         });
         CurrentWindowProc = Marshal.GetFunctionPointerForDelegate(WindowProc);
+        WindowHandle = GetMainWindowHandle();
         OriginalWindowProc = User32.SetWindowLong(WindowHandle, User32.GWL_WNDPROC, CurrentWindowProc);
         return true;
     }

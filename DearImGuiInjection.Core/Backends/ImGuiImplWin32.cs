@@ -60,7 +60,7 @@ internal static class ImGuiImplWin32
             return false;
 
         // Setup backend capabilities flags
-        Data* bd = (Data*)ImGui.MemAlloc((uint)sizeof(Data));
+        Data* bd = (Data*)ImGui.MemAlloc((nuint)sizeof(Data));
         *bd = default;
         io.BackendPlatformUserData = bd;
         io.BackendPlatformName = (byte*)Marshal.StringToHGlobalAnsi($"imgui_impl_win32_{DearImGuiInjectionCore.BackendVersion}");

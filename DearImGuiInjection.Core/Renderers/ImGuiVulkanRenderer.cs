@@ -26,15 +26,15 @@ internal sealed class ImGuiVulkanRenderer : ImGuiRenderer
         public Semaphore RenderCompleteSemaphore;
     }
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private unsafe delegate Result AcquireNextImageKHRDelegate(Device device, SwapchainKHR swapchain, ulong timeout, Semaphore semaphore, Fence fence, uint* pImageIndex);
     private MinHookDetour<AcquireNextImageKHRDelegate> _acquireNextImageKHR;
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private unsafe delegate Result QueuePresentKHRDelegate(Queue queue, PresentInfoKHR* pPresentInfo);
     private MinHookDetour<QueuePresentKHRDelegate> _queuePresentKHR;
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private unsafe delegate Result CreateSwapchainKHRDelegate(Device device, SwapchainCreateInfoKHR* pCreateInfo, AllocationCallbacks* pAllocator, SwapchainKHR* pSwapchain);
     private MinHookDetour<CreateSwapchainKHRDelegate> _createSwapchainKHR;
 
@@ -71,7 +71,7 @@ internal sealed class ImGuiVulkanRenderer : ImGuiRenderer
         _createSwapchainKHR.Enable();
     }
 
-    public unsafe override void Dispose()
+    public override void Dispose()
     {
         _createSwapchainKHR.Dispose();
         _queuePresentKHR.Dispose();
@@ -350,6 +350,7 @@ internal sealed class ImGuiVulkanRenderer : ImGuiRenderer
             SharedAPI.Vulkan.DestroyDescriptorPool(g_Device, g_DescriptorPool, g_Allocator);
         if (g_Instance.Handle != 0)
             SharedAPI.Vulkan.DestroyInstance(g_Instance, g_Allocator);
+        SharedAPI.Vulkan.Dispose();
     }
 
     private unsafe void CreateRenderTarget(Device device, SwapchainKHR swapchain)

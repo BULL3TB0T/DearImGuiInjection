@@ -79,14 +79,6 @@ internal static class ImGuiImplDX11
     private static readonly IntPtr _psTarget = Marshal.StringToHGlobalAnsi("ps_4_0");
 
     // DirectX11 data
-    private unsafe struct ImDrawCallback
-    {
-        public static void* ResetRenderState = (void*)ImGui.ImDrawCallbackResetRenderState;
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void UserCallback(ImDrawList* parent_list, ImDrawCmd* cmd);
-    }
-
     private unsafe struct RenderState
     {
         public ID3D11Device* Device;
@@ -129,14 +121,6 @@ internal static class ImGuiImplDX11
     // It is STRONGLY preferred that you use docking branch with multi-viewports (== single Dear ImGui context + multiple windows) instead of multiple Dear ImGui contexts.
     private unsafe static Data* GetBackendData() => (Data*)ImGui.GetIO().BackendRendererUserData;
 
-    [StructLayout(LayoutKind.Sequential)]
-    private unsafe struct VERTEX_CONSTANT_BUFFER
-    {
-        public const int ElementCount = 4 * 4;
-        public const int ByteWidth = ElementCount * sizeof(float);
-
-        public fixed float mvp[ElementCount];
-    }
 
     // Functions
     private unsafe static void SetupRenderState(ImDrawData* draw_data, ID3D11DeviceContext* device_ctx)
@@ -158,19 +142,19 @@ internal static class ImGuiImplDX11
         MappedSubresource mapped_resource;
         if (device_ctx->Map((ID3D11Resource*)bd->pVertexConstantBuffer, 0, Map.WriteDiscard, 0, &mapped_resource) == 0)
         {
-            VERTEX_CONSTANT_BUFFER* constant_buffer = (VERTEX_CONSTANT_BUFFER*)mapped_resource.PData;
+            ImGuiImpl.VERTEX_CONSTANT_BUFFER* constant_buffer = (ImGuiImpl.VERTEX_CONSTANT_BUFFER*)mapped_resource.PData;
             float L = draw_data->DisplayPos.X;
             float R = draw_data->DisplayPos.X + draw_data->DisplaySize.X;
             float T = draw_data->DisplayPos.Y;
             float B = draw_data->DisplayPos.Y + draw_data->DisplaySize.Y;
-            float* mvp = stackalloc float[VERTEX_CONSTANT_BUFFER.ElementCount]
+            float* mvp = stackalloc float[ImGuiImpl.VERTEX_CONSTANT_BUFFER.ElementCount]
             {
                 2.0f/(R-L),   0.0f,           0.0f,       0.0f,
                 0.0f,         2.0f/(T-B),     0.0f,       0.0f,
                 0.0f,         0.0f,           0.5f,       0.0f,
                 (R+L)/(L-R),  (T+B)/(B-T),    0.5f,       1.0f,
             };
-            Buffer.MemoryCopy(mvp, constant_buffer->mvp, VERTEX_CONSTANT_BUFFER.ByteWidth, VERTEX_CONSTANT_BUFFER.ByteWidth);
+            Buffer.MemoryCopy(mvp, constant_buffer->mvp, ImGuiImpl.VERTEX_CONSTANT_BUFFER.ByteWidth, ImGuiImpl.VERTEX_CONSTANT_BUFFER.ByteWidth);
             device_ctx->Unmap((ID3D11Resource*)bd->pVertexConstantBuffer, 0);
         }
 
@@ -351,7 +335,7 @@ internal static class ImGuiImplDX11
                 {
                     // User callback, registered via ImDrawList::AddCallback()
                     // (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
-                    if (pcmd->UserCallback == ImDrawCallback.ResetRenderState)
+                    if (pcmd->UserCallback == (void*)ImGui.ImDrawCallbackResetRenderState)
                         SetupRenderState(draw_data, device);
                     else
                         ((delegate* unmanaged[Cdecl]<ImDrawList*, ImDrawCmd*, void>)pcmd->UserCallback)(draw_list, pcmd);
@@ -429,7 +413,7 @@ internal static class ImGuiImplDX11
             if (tex->Format != ImTextureFormat.Rgba32)
                 throw new InvalidOperationException("Expected texture format RGBA32.");
             uint* pixels = (uint*)tex->GetPixels();
-            Texture* backend_tex = (Texture*)ImGui.MemAlloc((uint)sizeof(Texture));
+            Texture* backend_tex = (Texture*)ImGui.MemAlloc((nuint)sizeof(Texture));
             *backend_tex = default;
 
             // Create texture
@@ -529,7 +513,7 @@ internal static class ImGuiImplDX11
             {
                 BufferDesc desc = new BufferDesc
                 {
-                    ByteWidth = VERTEX_CONSTANT_BUFFER.ByteWidth,
+                    ByteWidth = ImGuiImpl.VERTEX_CONSTANT_BUFFER.ByteWidth,
                     Usage = Usage.Dynamic,
                     BindFlags = (uint)BindFlag.ConstantBuffer,
                     CPUAccessFlags = (uint)CpuAccessFlag.Write,
@@ -669,7 +653,7 @@ internal static class ImGuiImplDX11
             throw new InvalidOperationException("Already initialized a renderer backend!");
 
         // Setup backend capabilities flags
-        Data* bd = (Data*)ImGui.MemAlloc((uint)sizeof(Data));
+        Data* bd = (Data*)ImGui.MemAlloc((nuint)sizeof(Data));
         *bd = new();
         io.BackendRendererUserData = bd;
         io.BackendRendererName = (byte*)Marshal.StringToHGlobalAnsi($"imgui_impl_dx11_{DearImGuiInjectionCore.BackendVersion}");

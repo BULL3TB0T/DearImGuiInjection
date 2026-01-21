@@ -24,7 +24,7 @@ internal struct TrackMouseEvent
 
     public TrackMouseEvent(TrackMouseEventFlags dwFlags, IntPtr hWnd, UInt32 dwHoverTime)
     {
-        this.cbSize = Marshal.SizeOf(typeof(TrackMouseEvent));
+        this.cbSize = Marshal.SizeOf<TrackMouseEvent>();
         this.dwFlags = dwFlags;
         this.hWnd = hWnd;
         this.dwHoverTime = dwHoverTime;

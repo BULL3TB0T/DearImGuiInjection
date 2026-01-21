@@ -51,7 +51,7 @@ internal static class Kernel32
         int cchWideChar);
 
     [SecurityCritical, SuppressUnmanagedCodeSecurity]
-    [DllImport(Dll, CallingConvention = CallingConvention.Winapi)]
+    [DllImport(Dll)]
     private static extern ulong VerSetConditionMask(ulong dwlConditionMask, VER_MASK dwTypeBitMask, VER_CONDITION dwConditionMask);
 
     [SecuritySafeCritical]

@@ -76,15 +76,15 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
         }
     }
 
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private unsafe delegate int Present1Delegate(IDXGISwapChain3* swapChain, uint syncInterval, uint presentFlags, PresentParameters* presentParameters);
     private MinHookDetour<Present1Delegate> _present1;
 
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private unsafe delegate int ResizeBuffersDelegate(IDXGISwapChain3* swapChain, uint bufferCount, uint width, uint height, Format newFormat, uint swapChainFlags);
     private MinHookDetour<ResizeBuffersDelegate> _resizeBuffers;
 
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private unsafe delegate void ExecuteCommandListsDelegate(ID3D12CommandQueue* commandQueue, uint numCommandLists, ID3D12CommandList** ppCommandLists);
     private MinHookDetour<ExecuteCommandListsDelegate> _executeCommandLists;
 
@@ -112,6 +112,7 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
     {
         SharedAPI.D3D12 = D3D12.GetApi();
         SharedAPI.D3DCompiler = D3DCompiler.GetApi();
+        SharedAPI.DXGI = DXGI.GetApi(null);
         IntPtr windowHandle = User32.CreateFakeWindow();
         SwapChainDesc1 sd = new SwapChainDesc1
         {
@@ -149,7 +150,7 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
         }
         riid = IDXGIFactory5.Guid;
         IDXGIFactory5* dxgiFactory;
-        res = DXGI.GetApi(null).CreateDXGIFactory1(&riid, (void**)&dxgiFactory);
+        res = SharedAPI.DXGI.CreateDXGIFactory1(&riid, (void**)&dxgiFactory);
         if (res != 0)
         {
             pd3dCommandQueue->Release();
@@ -469,6 +470,9 @@ internal sealed class ImGuiDX12Renderer : ImGuiRenderer
             g_pd3dDevice->Release();
             g_pd3dDevice = null;
         }
+        SharedAPI.DXGI.Dispose();
+        SharedAPI.D3DCompiler.Dispose();
+        SharedAPI.D3D12.Dispose();
     }
 
     private unsafe void CleanupRenderTarget()

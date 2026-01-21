@@ -600,7 +600,7 @@ internal static class User32
     public const int GWL_EXSTYLE = -20;
     public const int GWL_WNDPROC = -4;
 
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     public delegate IntPtr WndProcDelegate(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam);
     private static readonly WndProcDelegate s_WndProc = DefWindowProcW;
 

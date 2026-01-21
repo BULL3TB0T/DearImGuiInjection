@@ -4,9 +4,11 @@ Inject [Dear ImGui](https://github.com/ocornut/imgui) into any unity game.
 - DirectX 11
 - DirectX 12
 - Vulkan
-- ~~OpenGL~~
+- OpenGLES2
+- OpenGLES3
+- OpenGLCore
 ## Mod Developers
-TO-DO
+TO-DO: Planning really soon.
 ## Credits
 - [Sewer56](https://github.com/Sewer56)
 - [xiaoxiao921](https://github.com/xiaoxiao921) for the main repository!
