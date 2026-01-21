@@ -146,7 +146,6 @@ internal static class ImGuiImplOpenGL
             Out_Color = Frag_Color * texture(Texture, Frag_UV.st);
         }";
 
-
     // OpenGL Data
     private unsafe struct Data
     {
@@ -849,7 +848,6 @@ internal static class ImGuiImplOpenGL
             vertex_shader = _vertexShaderGlsl130;
             fragment_shader = _fragmentShaderGlsl130;
         }
-        Log.Info(glsl_version);
 
         // Create shaders
         string[] vertex_shader_with_version = { _glslVersion, vertex_shader };

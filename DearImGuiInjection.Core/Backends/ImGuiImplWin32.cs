@@ -10,10 +10,10 @@ namespace DearImGuiInjection.Backends;
 
 internal static class ImGuiImplWin32
 {
-
-    private static IntPtr XInputDLL;
-    private static XInputGetCapabilitiesDelegate XInputGetCapabilities;
-    private static XInputGetStateDelegate XInputGetState;
+    private static bool _ownsXInput;
+    private static IntPtr _xInputDLL;
+    private static XInputGetCapabilitiesDelegate _xInputGetCapabilities;
+    private static XInputGetStateDelegate _xInputGetState;
 
     private struct Data
     {
@@ -80,7 +80,7 @@ internal static class ImGuiImplWin32
 
         // Dynamically load XInput library
         bd->WantUpdateHasGamepad = true;
-        if (XInputDLL == IntPtr.Zero)
+        if (_xInputDLL == IntPtr.Zero)
         {
             string[] xinput_dll_names = new string[]
             {
@@ -92,14 +92,29 @@ internal static class ImGuiImplWin32
             };
             for (int n = 0; n < xinput_dll_names.Length; n++)
             {
-                var dll = Kernel32.LoadLibrary(xinput_dll_names[n]);
-                if (dll != IntPtr.Zero)
+                string libraryName = xinput_dll_names[n];
+                bool owns = false;
+                IntPtr dll = Kernel32.GetModuleHandle(libraryName);
+                if (dll == IntPtr.Zero)
                 {
-                    XInputDLL = dll;
-                    XInputGetCapabilities = Marshal.GetDelegateForFunctionPointer<XInputGetCapabilitiesDelegate>(Kernel32.GetProcAddress(dll, "XInputGetCapabilities"));
-                    XInputGetState = Marshal.GetDelegateForFunctionPointer<XInputGetStateDelegate>(Kernel32.GetProcAddress(dll, "XInputGetState"));
-                    break;
+                    dll = Kernel32.LoadLibrary(libraryName);
+                    owns = dll != IntPtr.Zero;
                 }
+                if (dll == IntPtr.Zero)
+                    continue;
+                IntPtr pGetCapabilities = Kernel32.GetProcAddress(dll, "XInputGetCapabilities");
+                IntPtr pGetState = Kernel32.GetProcAddress(dll, "XInputGetState");
+                if (pGetCapabilities == IntPtr.Zero || pGetState == IntPtr.Zero)
+                {
+                    if (owns)
+                        Kernel32.FreeLibrary(dll);
+                    continue;
+                }
+                _xInputDLL = dll;
+                _ownsXInput = owns;
+                _xInputGetCapabilities = Marshal.GetDelegateForFunctionPointer<XInputGetCapabilitiesDelegate>(pGetCapabilities);
+                _xInputGetState = Marshal.GetDelegateForFunctionPointer<XInputGetStateDelegate>(pGetState);
+                break;
             }
         }
 
@@ -114,9 +129,9 @@ internal static class ImGuiImplWin32
         ImGuiIOPtr io = ImGui.GetIO();
         ImGuiPlatformIOPtr platform_io = ImGui.GetPlatformIO();
 
-        // Unload XInput library
-        if (XInputDLL != IntPtr.Zero)
-            Kernel32.FreeLibrary(XInputDLL);
+        // Unload XInput library if owned
+        if (_ownsXInput && _xInputDLL != IntPtr.Zero)
+            Kernel32.FreeLibrary(_xInputDLL);
 
         Marshal.FreeHGlobal((IntPtr)io.BackendPlatformName);
         io.BackendPlatformName = null;
@@ -251,12 +266,12 @@ internal static class ImGuiImplWin32
         if (bd->WantUpdateHasGamepad)
         {
             XINPUT_CAPABILITIES caps = default;
-            bd->HasGamepad = XInputGetCapabilities != null && (XInputGetCapabilities(0, XINPUT_FLAG_GAMEPAD, out caps) == ERROR_SUCCESS);
+            bd->HasGamepad = _xInputGetCapabilities != null && (_xInputGetCapabilities(0, XINPUT_FLAG_GAMEPAD, out caps) == ERROR_SUCCESS);
             bd->WantUpdateHasGamepad = false;
         }
 
         io.BackendFlags &= ~ImGuiBackendFlags.HasGamepad;
-        if (!bd->HasGamepad || XInputGetState == null || XInputGetState(0, out XINPUT_STATE xinput_state) != ERROR_SUCCESS)
+        if (!bd->HasGamepad || _xInputGetState == null || _xInputGetState(0, out XINPUT_STATE xinput_state) != ERROR_SUCCESS)
             return;
         io.BackendFlags |= ImGuiBackendFlags.HasGamepad;
         XINPUT_GAMEPAD gamepad = xinput_state.Gamepad;
@@ -602,10 +617,10 @@ internal static class ImGuiImplWin32
                     return IntPtr.Zero;
                 }
             case WindowMessage.WM_MOUSEWHEEL:
-                io.AddMouseWheelEvent(0.0f, User32.Macros.GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA);
+                io.AddMouseWheelEvent(0, (float)User32.Macros.GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA);
                 return IntPtr.Zero;
             case WindowMessage.WM_MOUSEHWHEEL:
-                io.AddMouseWheelEvent(-(float)User32.Macros.GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA, 0.0f);
+                io.AddMouseWheelEvent(-(float)User32.Macros.GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA, 0);
                 return IntPtr.Zero;
             case WindowMessage.WM_KEYDOWN:
             case WindowMessage.WM_KEYUP:

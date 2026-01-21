@@ -114,7 +114,7 @@ public static class DearImGuiInjectionCore
         catch (Exception e)
         {
             Log.Error($"Renderer {rendererKind} Init() failed: {e}");
-            renderer.DisposeAndUnhook();
+            renderer.Dispose();
             return false;
         }
         Loader.CreateConfig(ref ShowDemoWindow, "General", "Show Demo Window", false,
@@ -136,19 +136,19 @@ public static class DearImGuiInjectionCore
 
     internal static void Dispose()
     {
-        foreach (ImGuiModule module in MultiContextCompositor.Modules)
+        //DearImGuiInjectionCore.TextureManager.Dispose();
+        Renderer?.Dispose();
+        Renderer = null;
+        for (int i = 0; i < DearImGuiInjectionCore.MultiContextCompositor.Modules.Count; i++)
         {
+            ImGuiModule module = DearImGuiInjectionCore.MultiContextCompositor.Modules[i];
             module.OnInit = null;
             module.OnRender = null;
-        }
-        //DearImGuiInjectionCore.TextureManager.Dispose();
-        Renderer?.DisposeAndUnhook();
-        Renderer = null;
-        foreach (ImGuiModule module in MultiContextCompositor.Modules)
             DestroyModule(module.Id);
+        }
     }
 
-    public unsafe static ImGuiModule CreateModule(string Id)
+    public unsafe static ImGuiModule CreateModule(string Id, ModuleCreateOptions createOptions = ModuleCreateOptions.Default, string iniFilePath = null)
     {
         if (string.IsNullOrWhiteSpace(Id) || MultiContextCompositor.Modules.Any(x => x.Id == Id))
         {
@@ -156,20 +156,34 @@ public static class DearImGuiInjectionCore
             return null;
         }
         ImGuiModule module = new ImGuiModule(Id);
+        module.CreateOptions = createOptions;
         module.Context = ImGui.CreateContext();
         ImGui.SetCurrentContext(module.Context);
-        ImGui.StyleColorsDark();
-        if (DPIScale > 0)
+        ImGuiIOPtr io = ImGui.GetIO();
+        module.IO = io;
+        if ((module.CreateOptions & ModuleCreateOptions.IniFile) != 0)
         {
-            ImGuiStylePtr style = ImGui.GetStyle();
+            Directory.CreateDirectory(ConfigPath);
+            if (iniFilePath == null)
+                iniFilePath = Path.Combine(ConfigPath, $"{Id}.ini");
+            io.IniFilename = (byte*)Marshal.StringToHGlobalAnsi(iniFilePath);
+        }
+        if ((module.CreateOptions & ModuleCreateOptions.DefaultFlags) != 0)
+        {
+            io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
+            io.ConfigFlags |= ImGuiConfigFlags.NavEnableGamepad;
+        }
+        module.PlatformIO = ImGui.GetPlatformIO();
+        ImGuiStylePtr style = ImGui.GetStyle();
+        module.Style = style;
+        if ((module.CreateOptions & ModuleCreateOptions.DefaultStyle) != 0)
+            ImGui.StyleColorsDark(module.Style);
+        if ((createOptions & ModuleCreateOptions.IgnoreDPIScale) == 0 && DPIScale > 0)
+        {
             style.ScaleAllSizes(DPIScale);
             style.FontScaleDpi = DPIScale;
         }
-        ImGuiIOPtr io = ImGui.GetIO();
-        module.IO = io;
-        Directory.CreateDirectory(ConfigPath);
-        io.IniFilename = (byte*)Marshal.StringToHGlobalAnsi(Path.Combine(ConfigPath, $"{Id}.ini"));
-        module.PlatformIO = ImGui.GetPlatformIO();
+        ImGui.SetCurrentContext(null);
         MultiContextCompositor.AddModule(module);
         return module;
     }
@@ -194,9 +208,8 @@ public static class DearImGuiInjectionCore
             Log.Error($"Module \"{module.Id}\" OnDispose threw an exception: {e}");
         }
         module.OnDispose = null;
-        IntPtr iniFilename = (IntPtr)module.IO.IniFilename;
-        if (iniFilename != IntPtr.Zero)
-            Marshal.FreeHGlobal(iniFilename);
+        if ((module.CreateOptions & ModuleCreateOptions.IniFile) != 0)
+            Marshal.FreeHGlobal((IntPtr)module.IO.IniFilename);
         ImGui.DestroyContext();
     }
 }

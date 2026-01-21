@@ -4,12 +4,12 @@ using System.Runtime.InteropServices;
 
 namespace DearImGuiInjection;
 
-internal sealed class MinHookDetour<T> where T : Delegate
+internal sealed class MinHookDetour<TDelegate> where TDelegate : Delegate
 {
     private static bool _isInitialized;
 
     private IntPtr _target;
-    private T _detourDelegate;
+    private TDelegate _detourDelegate;
     private IntPtr _detour;
 
     private bool _created;
@@ -17,7 +17,7 @@ internal sealed class MinHookDetour<T> where T : Delegate
     private bool _disposed;
 
     public string Name { get; private set; }
-    public T Original { get; private set; }
+    public TDelegate Original { get; private set; }
 
     public MinHookDetour(string name)
     {
@@ -26,7 +26,7 @@ internal sealed class MinHookDetour<T> where T : Delegate
         Name = name;
     }
 
-    public void Create(IntPtr target, T detour)
+    public void Create(IntPtr target, TDelegate detour)
     {
         if (_created || _disposed)
             return;
@@ -37,7 +37,7 @@ internal sealed class MinHookDetour<T> where T : Delegate
         _target = target;
         _detourDelegate = detour;
         MinHook.Ok(MinHook.CreateHook(_target, Marshal.GetFunctionPointerForDelegate(_detourDelegate), out IntPtr original), $"MH_CreateHook({Name})");
-        Original = Marshal.GetDelegateForFunctionPointer<T>(original);
+        Original = Marshal.GetDelegateForFunctionPointer<TDelegate>(original);
         _created = true;
     }
 

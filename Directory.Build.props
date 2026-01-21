@@ -1,6 +1,7 @@
 <Project>
   <ItemGroup>
     <PackExclude Include="FASM" />
+    <PackExclude Include="Unity" />
   </ItemGroup>
   <PropertyGroup>
     <!--

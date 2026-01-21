@@ -582,8 +582,8 @@ internal static class User32
         public static byte LOBYTE(ushort value) => (byte)(value & 0xFF);
         public static ushort HIBYTE(ushort value) => (ushort)((value >> 8) & 0xFF);
 
-        public static ushort GET_XBUTTON_WPARAM(IntPtr wParam) => HIWORD(wParam);
-        public static int GET_WHEEL_DELTA_WPARAM(IntPtr wParam) => (short)HIWORD(wParam);
+        public static int GET_XBUTTON_WPARAM(IntPtr wParam) => HIWORD(wParam);
+        public static short GET_WHEEL_DELTA_WPARAM(IntPtr wParam) => (short)HIWORD(wParam);
     }
 
     public const uint CP_ACP = 0;
@@ -602,7 +602,7 @@ internal static class User32
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     public delegate IntPtr WndProcDelegate(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam);
-    private static readonly WndProcDelegate s_WndProc = DefWindowProcW;
+    private static readonly WndProcDelegate s_WndProc = DefWindowProc;
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
@@ -624,8 +624,8 @@ internal static class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool DestroyWindow(IntPtr hwnd);
 
-    [DllImport(Dll)]
-    static extern IntPtr DefWindowProcW(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam);
+    [DllImport(Dll, CharSet = CharSet.Unicode)]
+    public static extern IntPtr DefWindowProc(IntPtr hWnd, WindowMessage uMsg, IntPtr wParam, IntPtr lParam);
 
     [DllImport(Dll)]
     public static extern IntPtr GetCapture();
