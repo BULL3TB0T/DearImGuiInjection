@@ -209,7 +209,11 @@ public static class DearImGuiInjectionCore
         }
         module.OnDispose = null;
         if ((module.CreateOptions & ModuleCreateOptions.IniFile) != 0)
-            Marshal.FreeHGlobal((IntPtr)module.IO.IniFilename);
+        {
+            IntPtr iniFileName = (IntPtr)module.IO.IniFilename;
+            if (iniFileName != IntPtr.Zero)
+                Marshal.FreeHGlobal(iniFileName);
+        }
         ImGui.DestroyContext();
     }
 }
