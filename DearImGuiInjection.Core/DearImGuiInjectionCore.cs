@@ -178,7 +178,7 @@ public static class DearImGuiInjectionCore
         module.Style = style;
         if ((module.CreateOptions & ModuleCreateOptions.DefaultStyle) != 0)
             ImGui.StyleColorsDark(module.Style);
-        if ((createOptions & ModuleCreateOptions.IgnoreDPIScale) == 0 && DPIScale > 0)
+        if ((createOptions & ModuleCreateOptions.IgnoreDpiAwareness) == 0 && DPIScale > 0)
         {
             style.ScaleAllSizes(DPIScale);
             style.FontScaleDpi = DPIScale;

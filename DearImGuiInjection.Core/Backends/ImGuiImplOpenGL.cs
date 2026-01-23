@@ -20,7 +20,6 @@ internal static class ImGuiImplOpenGL
     // Extracted at runtime using GL_MAJOR_VERSION, GL_MINOR_VERSION queries (e.g. 320 for GL 3.2)
     private static int _glVersion;
     private static string _glslVersion;
-    private static int _glProfileMask;
 
     // Vertex arrays are not supported on ES2/WebGL1
     private static bool _useVertexArray;
@@ -41,6 +40,8 @@ internal static class ImGuiImplOpenGL
 
     // Desktop GL 3.3+ and GL ES 3.0+ have glBindSampler()
     private static bool _mayHaveBindSampler;
+
+    private static bool _unpackRowLength;
 
     private static int _maxTextureSize;
     private static bool _useBufferSubData;
@@ -158,7 +159,7 @@ internal static class ImGuiImplOpenGL
         public uint VboHandle, ElementsHandle;
         public nuint VertexBufferSize;
         public nuint IndexBufferSize;
-        public ImVector<Byte> TempBuffer;
+        public ImVector<byte> TempBuffer;
     }
 
     // OpenGL vertex attribute state (for ES 1.0 and ES 2.0 only)
@@ -208,8 +209,6 @@ internal static class ImGuiImplOpenGL
         {
             // Query for GL version (e.g. 320 for GL 3.2)
             string gl_version_str = SharedAPI.GL.GetStringS(GLEnum.Version);
-            if (gl_version_str == null)
-                throw new InvalidOperationException("GetString(GLEnum.Version) returned null. Is the GL context current?");
             _glProfileIsES2 = gl_version_str.StartsWith("OpenGL ES 2", StringComparison.OrdinalIgnoreCase);
             _glProfileIsES3 = gl_version_str.StartsWith("OpenGL ES 3", StringComparison.OrdinalIgnoreCase);
             if (_glProfileIsES2)
@@ -254,10 +253,12 @@ internal static class ImGuiImplOpenGL
             _mayHavePrimitiveRestart = !_glProfileIsES2 && !_glProfileIsES3 && _glVersion >= 310;
             _mayHaveVtxOffset = !_glProfileIsES2 && !_glProfileIsES3 && _glVersion >= 320;
             _mayHaveBindSampler = !_glProfileIsES2 && (_glProfileIsES3 || _glVersion >= 330);
+            _unpackRowLength = !_glProfileIsES2 && !_glProfileIsES3;
 
+            int profileMask = 0;
             if (!_glProfileIsES3 && _glVersion >= 320)
-                SharedAPI.GL.GetInteger(GLEnum.ContextProfileMask, out _glProfileMask);
-            _glProfileIsCompat = (_glProfileMask & (int)GLEnum.ContextCompatibilityProfileBit) != 0;
+                SharedAPI.GL.GetInteger(GLEnum.ContextProfileMask, out profileMask);
+            _glProfileIsCompat = (profileMask & (int)GLEnum.ContextCompatibilityProfileBit) != 0;
 
             _useBufferSubData = false;
             /*
@@ -305,7 +306,7 @@ internal static class ImGuiImplOpenGL
                 $"\n  GlVersion = {_glVersion}, \"{gl_version_str}\"\n" +
                 $"  GlslVersion = \"{_glslVersion}\"\n" +
                 $"  GlProfileIsCompat = {_glProfileIsCompat}\n" +
-                $"  GlProfileMask = 0x{_glProfileMask:X}\n" +
+                $"  GlProfileMask = 0x{profileMask:X}\n" +
                 $"  GlProfileIsES2/IsEs3 = {_glProfileIsES2}/{_glProfileIsES3}\n" +
                 $"  MaxTextureSize = {_maxTextureSize}\n" +
                 $"  UseBufferSubData = {_useBufferSubData}\n" +
@@ -319,7 +320,8 @@ internal static class ImGuiImplOpenGL
                 $"  _mayHaveBindBufferPixelUnpack={_mayHaveBindBufferPixelUnpack}\n" +
                 $"  _mayHavePrimitiveRestart={_mayHavePrimitiveRestart}\n" +
                 $"  _mayHaveVtxOffset={_mayHaveVtxOffset}\n" +
-                $"  _mayHaveBindSampler={_mayHaveBindSampler}"
+                $"  _mayHaveBindSampler={_mayHaveBindSampler}" +
+                $"  _unpackRowLength={_unpackRowLength}"
             );
             */
 
@@ -660,10 +662,11 @@ internal static class ImGuiImplOpenGL
         SharedAPI.GL.Scissor(last_scissor_box[0], last_scissor_box[1], (uint)last_scissor_box[2], (uint)last_scissor_box[3]);
     }
 
-    private unsafe static void DestroyTexture(ImTextureData* tex)
+    private unsafe static void DestroyTexture(ImTextureData* tex, bool disposing)
     {
         uint gl_tex_id = (uint)tex->TexID;
-        SharedAPI.GL.DeleteTextures(1, &gl_tex_id);
+        if (!disposing)
+            SharedAPI.GL.DeleteTextures(1, &gl_tex_id);
 
         // Clear identifiers and mark as destroyed (in order to allow e.g. calling InvalidateDeviceObjects while running)
         tex->SetTexID(ImTextureID.Null);
@@ -675,7 +678,7 @@ internal static class ImGuiImplOpenGL
         // FIXME: Consider backing up and restoring
         if (tex->Status == ImTextureStatus.WantCreate || tex->Status == ImTextureStatus.WantUpdates)
         {
-            if (!_glProfileIsES2 && !_glProfileIsES3) // Not on WebGL/ES
+            if (_unpackRowLength) // Not on WebGL/ES
                 SharedAPI.GL.PixelStore(GLEnum.UnpackRowLength, 0);
             SharedAPI.GL.PixelStore(GLEnum.UnpackAlignment, 1);
         }
@@ -718,7 +721,7 @@ internal static class ImGuiImplOpenGL
 
             uint gl_tex_id = (uint)tex->TexID;
             SharedAPI.GL.BindTexture(GLEnum.Texture2D, gl_tex_id);
-            if (!_glProfileIsES2 && !_glProfileIsES3) // Not on WebGL/ES
+            if (_unpackRowLength) // Not on WebGL/ES
             {
                 SharedAPI.GL.PixelStore(GLEnum.UnpackRowLength, tex->Width);
                 for (int i = 0; i < tex->Updates.Size; i++)
@@ -754,7 +757,7 @@ internal static class ImGuiImplOpenGL
             SharedAPI.GL.BindTexture(GLEnum.Texture2D, (uint)last_texture); // Restore state
         }
         else if (tex->Status == ImTextureStatus.WantDestroy && tex->UnusedFrames > 0)
-            DestroyTexture(tex);
+            DestroyTexture(tex, false);
     }
 
     // If you get an error please report on github. You may try different GL context version or GLSL version. See GL<>GLSL version table at the top of this file.
@@ -828,7 +831,12 @@ internal static class ImGuiImplOpenGL
         // Select shaders matching our GLSL versions
         string vertex_shader = null;
         string fragment_shader = null;
-        if (glsl_version < 130)
+        if (glsl_version == 300)
+        {
+            vertex_shader = _vertexShaderGlsl300ES;
+            fragment_shader = _fragmentShaderGlsl300ES;
+        }
+        else if (glsl_version < 130)
         {
             vertex_shader = _vertexShaderGlsl120;
             fragment_shader = _fragmentShaderGlsl120;
@@ -837,11 +845,6 @@ internal static class ImGuiImplOpenGL
         {
             vertex_shader = _vertexShaderGlsl410Core;
             fragment_shader = _fragmentShaderGlsl410Core;
-        }
-        else if (glsl_version == 300)
-        {
-            vertex_shader = _vertexShaderGlsl300ES;
-            fragment_shader = _fragmentShaderGlsl300ES;
         }
         else
         {
@@ -884,13 +887,8 @@ internal static class ImGuiImplOpenGL
         bd->AttribLocationVtxColor = (uint)SharedAPI.GL.GetAttribLocation(bd->ShaderHandle, "Color");
 
         // Create buffers
-        uint vboHandle = 0;
-        SharedAPI.GL.GenBuffers(1, &vboHandle);
-        bd->VboHandle = vboHandle;
-
-        uint elementsHandle = 0;
-        SharedAPI.GL.GenBuffers(1, &elementsHandle);
-        bd->ElementsHandle = elementsHandle;
+        SharedAPI.GL.GenBuffers(1, out bd->VboHandle);
+        SharedAPI.GL.GenBuffers(1, out bd->ElementsHandle);
 
         // Restore modified GL state
         SharedAPI.GL.BindTexture(GLEnum.Texture2D, (uint)last_texture);
@@ -905,20 +903,21 @@ internal static class ImGuiImplOpenGL
 
     private unsafe static void DestroyDeviceObjects()
     {
+        // Cannot call OpenGL here: Unity has already destroyed the current context.
         Data* bd = GetBackendData();
         if (bd->VboHandle != 0)
         {
-            SharedAPI.GL.DeleteBuffers(1, ref bd->VboHandle);
+            //SharedAPI.GL.DeleteBuffers(1, ref bd->VboHandle);
             bd->VboHandle = 0;
         }
         if (bd->ElementsHandle != 0)
         {
-            SharedAPI.GL.DeleteBuffers(1, ref bd->ElementsHandle);
+            //SharedAPI.GL.DeleteBuffers(1, ref bd->ElementsHandle);
             bd->ElementsHandle = 0;
         }
         if (bd->ShaderHandle != 0)
         {
-            SharedAPI.GL.DeleteProgram(bd->ShaderHandle);
+            //SharedAPI.GL.DeleteProgram(bd->ShaderHandle);
             bd->ShaderHandle = 0;
         }
 
@@ -929,7 +928,7 @@ internal static class ImGuiImplOpenGL
         {
             ImTextureDataPtr tex = textures.Data[i];
             if (tex.RefCount == 1)
-                DestroyTexture(tex);
+                DestroyTexture(tex, true);
         }
     }
 }

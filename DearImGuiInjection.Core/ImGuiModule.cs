@@ -11,7 +11,7 @@ public enum ModuleCreateOptions
     IniFile = 1 << 0,
     DefaultFlags = 1 << 1,
     DefaultStyle = 1 << 2,
-    IgnoreDPIScale = 1 << 3,
+    IgnoreDpiAwareness = 1 << 3,
     Default = IniFile | DefaultFlags | DefaultStyle
 }
 
