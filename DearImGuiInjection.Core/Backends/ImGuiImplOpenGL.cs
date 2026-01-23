@@ -42,6 +42,7 @@ internal static class ImGuiImplOpenGL
     private static bool _mayHaveBindSampler;
 
     private static bool _unpackRowLength;
+    private static bool _mayHaveSrgbFramebuffer;
 
     private static int _maxTextureSize;
     private static bool _useBufferSubData;
@@ -168,23 +169,23 @@ internal static class ImGuiImplOpenGL
         public int Enabled, Size, Type, Normalized, Stride;
         public void* Ptr;
 
-        public unsafe void GetState(int index)
+        public unsafe void GetState(uint index)
         {
-            SharedAPI.GL.GetVertexAttrib((uint)index, GLEnum.VertexAttribArrayEnabled, out Enabled);
-            SharedAPI.GL.GetVertexAttrib((uint)index, GLEnum.VertexAttribArraySize, out Size);
-            SharedAPI.GL.GetVertexAttrib((uint)index, GLEnum.VertexAttribArrayType, out Type);
-            SharedAPI.GL.GetVertexAttrib((uint)index, GLEnum.VertexAttribArrayNormalized, out Normalized);
-            SharedAPI.GL.GetVertexAttrib((uint)index, GLEnum.VertexAttribArrayStride, out Stride);
-            SharedAPI.GL.GetVertexAttribPointer((uint)index, GLEnum.VertexAttribArrayPointer, out Ptr);
+            SharedAPI.GL.GetVertexAttrib(index, GLEnum.VertexAttribArrayEnabled, out Enabled);
+            SharedAPI.GL.GetVertexAttrib(index, GLEnum.VertexAttribArraySize, out Size);
+            SharedAPI.GL.GetVertexAttrib(index, GLEnum.VertexAttribArrayType, out Type);
+            SharedAPI.GL.GetVertexAttrib(index, GLEnum.VertexAttribArrayNormalized, out Normalized);
+            SharedAPI.GL.GetVertexAttrib(index, GLEnum.VertexAttribArrayStride, out Stride);
+            SharedAPI.GL.GetVertexAttribPointer(index, GLEnum.VertexAttribArrayPointer, out Ptr);
         }
 
-        public unsafe void SetState(int index)
+        public unsafe void SetState(uint index)
         {
-            SharedAPI.GL.VertexAttribPointer((uint)index, Size, (GLEnum)Type, Normalized != 0, (uint)Stride, Ptr);
+            SharedAPI.GL.VertexAttribPointer(index, Size, (GLEnum)Type, Normalized != 0, (uint)Stride, Ptr);
             if (Enabled != 0)
-                SharedAPI.GL.EnableVertexAttribArray((uint)index);
+                SharedAPI.GL.EnableVertexAttribArray(index);
             else
-                SharedAPI.GL.DisableVertexAttribArray((uint)index);
+                SharedAPI.GL.DisableVertexAttribArray(index);
         }
     }
 
@@ -249,11 +250,12 @@ internal static class ImGuiImplOpenGL
             _useVertexArray = !_glProfileIsES2;
             _hasExtensionsEnum = !_glProfileIsES2 && !_glProfileIsES3;
             _mayHavePolygonMode = !_glProfileIsES2 && !_glProfileIsES3;
-            _mayHaveBindBufferPixelUnpack = !_glProfileIsES2 && _glVersion >= 210;
+            _mayHaveBindBufferPixelUnpack = !_glProfileIsES2;
             _mayHavePrimitiveRestart = !_glProfileIsES2 && !_glProfileIsES3 && _glVersion >= 310;
             _mayHaveVtxOffset = !_glProfileIsES2 && !_glProfileIsES3 && _glVersion >= 320;
             _mayHaveBindSampler = !_glProfileIsES2 && (_glProfileIsES3 || _glVersion >= 330);
             _unpackRowLength = !_glProfileIsES2 && !_glProfileIsES3;
+            _mayHaveSrgbFramebuffer = !_glProfileIsES2;
 
             int profileMask = 0;
             if (!_glProfileIsES3 && _glVersion >= 320)
@@ -321,7 +323,8 @@ internal static class ImGuiImplOpenGL
                 $"  _mayHavePrimitiveRestart={_mayHavePrimitiveRestart}\n" +
                 $"  _mayHaveVtxOffset={_mayHaveVtxOffset}\n" +
                 $"  _mayHaveBindSampler={_mayHaveBindSampler}" +
-                $"  _unpackRowLength={_unpackRowLength}"
+                $"  _unpackRowLength={_unpackRowLength}",
+                $"  _mayHaveSrgbFramebuffer={_mayHaveSrgbFramebuffer}",
             );
             */
 
@@ -488,9 +491,9 @@ internal static class ImGuiImplOpenGL
         {
             // This is part of VAO on OpenGL 3.0+ and OpenGL ES 3.0+.
             SharedAPI.GL.GetInteger(GLEnum.ElementArrayBufferBinding, out last_element_array_buffer);
-            last_vtx_attrib_state_pos.GetState((int)bd->AttribLocationVtxPos);
-            last_vtx_attrib_state_uv.GetState((int)bd->AttribLocationVtxUV);
-            last_vtx_attrib_state_color.GetState((int)bd->AttribLocationVtxColor);
+            last_vtx_attrib_state_pos.GetState(bd->AttribLocationVtxPos);
+            last_vtx_attrib_state_uv.GetState(bd->AttribLocationVtxUV);
+            last_vtx_attrib_state_color.GetState(bd->AttribLocationVtxColor);
         }
         int last_vertex_array_object = 0;
         if (_useVertexArray)
@@ -513,8 +516,8 @@ internal static class ImGuiImplOpenGL
         bool last_enable_depth_test = SharedAPI.GL.IsEnabled(GLEnum.DepthTest);
         bool last_enable_stencil_test = SharedAPI.GL.IsEnabled(GLEnum.StencilTest);
         bool last_enable_scissor_test = SharedAPI.GL.IsEnabled(GLEnum.ScissorTest);
-        bool last_enable_primitive_restart = !_glProfileIsES3 && _glVersion >= 310 ? SharedAPI.GL.IsEnabled(GLEnum.PrimitiveRestart) : false;
-        bool last_enable_framebuffer_srgb = !_glProfileIsES2 && SharedAPI.GL.IsEnabled(GLEnum.FramebufferSrgb);
+        bool last_enable_primitive_restart = _mayHavePrimitiveRestart && SharedAPI.GL.IsEnabled(GLEnum.PrimitiveRestart);
+        bool last_enable_framebuffer_srgb = _mayHaveSrgbFramebuffer && SharedAPI.GL.IsEnabled(GLEnum.FramebufferSrgb);
         if (last_enable_framebuffer_srgb)
             SharedAPI.GL.Disable(GLEnum.FramebufferSrgb);
 
@@ -619,9 +622,9 @@ internal static class ImGuiImplOpenGL
         if (!_useVertexArray)
         {
             SharedAPI.GL.BindBuffer(GLEnum.ElementArrayBuffer, (uint)last_element_array_buffer);
-            last_vtx_attrib_state_pos.SetState((int)bd->AttribLocationVtxPos);
-            last_vtx_attrib_state_uv.SetState((int)bd->AttribLocationVtxUV);
-            last_vtx_attrib_state_color.SetState((int)bd->AttribLocationVtxColor);
+            last_vtx_attrib_state_pos.SetState(bd->AttribLocationVtxPos);
+            last_vtx_attrib_state_uv.SetState(bd->AttribLocationVtxUV);
+            last_vtx_attrib_state_color.SetState(bd->AttribLocationVtxColor);
         }
         SharedAPI.GL.BlendEquationSeparate((GLEnum)last_blend_equation_rgb, (GLEnum)last_blend_equation_alpha);
         SharedAPI.GL.BlendFuncSeparate((GLEnum)last_blend_src_rgb, (GLEnum)last_blend_dst_rgb, (GLEnum)last_blend_src_alpha, (GLEnum)last_blend_dst_alpha);
@@ -637,6 +640,13 @@ internal static class ImGuiImplOpenGL
             else
                 SharedAPI.GL.Disable(GLEnum.PrimitiveRestart);
         }
+        if (_mayHaveSrgbFramebuffer)
+        {
+            if (last_enable_framebuffer_srgb)
+                SharedAPI.GL.Enable(GLEnum.FramebufferSrgb);
+            else
+                SharedAPI.GL.Disable(GLEnum.FramebufferSrgb);
+        }
 
         // Desktop OpenGL 3.0 and OpenGL 3.1 had separate polygon draw modes for front-facing and back-facing faces of polygons
         if (_mayHavePolygonMode)
@@ -648,14 +658,6 @@ internal static class ImGuiImplOpenGL
             }
             else
                 SharedAPI.GL.PolygonMode(GLEnum.FrontAndBack, (GLEnum)last_polygon_mode[0]);
-        }
-
-        if (!_glProfileIsES2)
-        {
-            if (last_enable_framebuffer_srgb)
-                SharedAPI.GL.Enable(GLEnum.FramebufferSrgb);
-            else
-                SharedAPI.GL.Disable(GLEnum.FramebufferSrgb);
         }
 
         SharedAPI.GL.Viewport(last_viewport[0], last_viewport[1], (uint)last_viewport[2], (uint)last_viewport[3]);

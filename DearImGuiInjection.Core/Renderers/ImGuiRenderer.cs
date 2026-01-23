@@ -12,9 +12,7 @@ public enum RendererKind
     DX11,
     DX12,
     Vulkan,
-    OpenGLES2,
-    OpenGLES3,
-    OpenGLCore
+    OpenGL
 }
 
 internal abstract class ImGuiRenderer

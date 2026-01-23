@@ -79,9 +79,9 @@ public static class DearImGuiInjectionCore
             2 => RendererKind.DX11,
             18 => RendererKind.DX12,
             21 => RendererKind.Vulkan,
-            8 => RendererKind.OpenGLES2,
-            11 => RendererKind.OpenGLES3,
-            17 => RendererKind.OpenGLCore,
+            8 => RendererKind.OpenGL,
+            11 => RendererKind.OpenGL,
+            17 => RendererKind.OpenGL,
             _ => RendererKind.None
         };
         if (rendererKind == RendererKind.None)
@@ -94,9 +94,7 @@ public static class DearImGuiInjectionCore
             RendererKind.DX11 => new ImGuiDX11Renderer(),
             RendererKind.DX12 => new ImGuiDX12Renderer(),
             RendererKind.Vulkan => new ImGuiVulkanRenderer(),
-            RendererKind.OpenGLES2 => new ImGuiOpenGLRenderer(),
-            RendererKind.OpenGLES3 => new ImGuiOpenGLRenderer(),
-            RendererKind.OpenGLCore => new ImGuiOpenGLRenderer(),
+            RendererKind.OpenGL => new ImGuiOpenGLRenderer(),
             _ => null
         };
         if (renderer == null)
