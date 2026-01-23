@@ -9,8 +9,7 @@ internal sealed class MinHookDetour<TDelegate> where TDelegate : Delegate
     private static bool _isInitialized;
 
     private IntPtr _target;
-    private TDelegate _detourDelegate;
-    private IntPtr _detour;
+    private TDelegate _detour;
 
     private bool _created;
     private bool _enabled;
@@ -35,8 +34,8 @@ internal sealed class MinHookDetour<TDelegate> where TDelegate : Delegate
         if (detour == null)
             throw new ArgumentException("Detour is null.", nameof(detour));
         _target = target;
-        _detourDelegate = detour;
-        MinHook.Ok(MinHook.CreateHook(_target, Marshal.GetFunctionPointerForDelegate(_detourDelegate), out IntPtr original), $"MH_CreateHook({Name})");
+        _detour = detour;
+        MinHook.Ok(MinHook.CreateHook(_target, Marshal.GetFunctionPointerForDelegate(_detour), out IntPtr original), $"MH_CreateHook({Name})");
         Original = Marshal.GetDelegateForFunctionPointer<TDelegate>(original);
         _created = true;
     }
