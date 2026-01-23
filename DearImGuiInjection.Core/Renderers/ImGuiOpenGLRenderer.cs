@@ -17,15 +17,15 @@ internal sealed class ImGuiOpenGLRenderer : ImGuiRenderer
     private delegate IntPtr WglGetProcAddressDelegate([MarshalAs(UnmanagedType.LPStr)] string name);
     private WglGetProcAddressDelegate _wglGetProcAddress;
 
-    private IntPtr openGL32;
+    private IntPtr _openGL32;
 
     public override void Init()
     {
         string libraryName = "opengl32.dll";
-        openGL32 = Kernel32.LoadLibrary(libraryName);
-        if (openGL32 == IntPtr.Zero)
+        _openGL32 = Kernel32.LoadLibrary(libraryName);
+        if (_openGL32 == IntPtr.Zero)
             throw new InvalidOperationException($"{libraryName} is not loaded.");
-        IntPtr pWglGetProcAddress = Kernel32.GetProcAddress(openGL32, "wglGetProcAddress");
+        IntPtr pWglGetProcAddress = Kernel32.GetProcAddress(_openGL32, "wglGetProcAddress");
         if (pWglGetProcAddress == IntPtr.Zero)
             throw new InvalidOperationException($"wglGetProcAddress not found in {libraryName}.");
         _wglGetProcAddress = Marshal.GetDelegateForFunctionPointer<WglGetProcAddressDelegate>(pWglGetProcAddress);
@@ -111,7 +111,7 @@ internal sealed class ImGuiOpenGLRenderer : ImGuiRenderer
         IntPtr ptr = _wglGetProcAddress(name);
         long v = ptr.ToInt64();
         if (v == 0 || v == 1 || v == 2 || v == 3 || v == -1)
-            ptr = Kernel32.GetProcAddress(openGL32, name);
+            ptr = Kernel32.GetProcAddress(_openGL32, name);
         return ptr;
     }
 }
