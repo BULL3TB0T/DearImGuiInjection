@@ -523,7 +523,7 @@ internal static class ImGuiImplOpenGL
         // The renderer would actually work without any VAO bound, but then our VertexAttrib calls would overwrite the default one currently bound.
         uint vertex_array_object = 0;
         if (_useVertexArray)
-            SharedAPI.GL.GenVertexArrays(1, &vertex_array_object);
+            SharedAPI.GL.GenVertexArrays(1, out vertex_array_object);
         SetupRenderState(draw_data, fb_width, fb_height, vertex_array_object);
 
         // Will project scissor/clipping rectangles into framebuffer space
@@ -603,7 +603,7 @@ internal static class ImGuiImplOpenGL
 
         // Destroy the temporary VAO
         if (_useVertexArray)
-            SharedAPI.GL.DeleteVertexArrays(1, &vertex_array_object);
+            SharedAPI.GL.DeleteVertexArrays(1, ref vertex_array_object);
 
         // Restore modified GL state
         // This "glIsProgram()" check is required because if the program is "pending deletion" at the time of binding backup, it will have been deleted by now and will cause an OpenGL error. See #6220.
@@ -666,7 +666,7 @@ internal static class ImGuiImplOpenGL
     {
         uint gl_tex_id = (uint)tex->TexID;
         if (!disposing)
-            SharedAPI.GL.DeleteTextures(1, &gl_tex_id);
+            SharedAPI.GL.DeleteTextures(1, ref gl_tex_id);
 
         // Clear identifiers and mark as destroyed (in order to allow e.g. calling InvalidateDeviceObjects while running)
         tex->SetTexID(ImTextureID.Null);
@@ -697,7 +697,7 @@ internal static class ImGuiImplOpenGL
             // Upload texture to graphics system
             // (Bilinear sampling is required by default. Set 'io.Fonts->Flags |= ImFontAtlasFlags_NoBakedLines' or 'style.AntiAliasedLinesUseTex = false' to allow point/nearest sampling)
             SharedAPI.GL.GetInteger(GLEnum.TextureBinding2D, out int last_texture);
-            SharedAPI.GL.GenTextures(1, &gl_texture_id);
+            SharedAPI.GL.GenTextures(1, out gl_texture_id);
             SharedAPI.GL.BindTexture(GLEnum.Texture2D, gl_texture_id);
             SharedAPI.GL.TexParameter(GLEnum.Texture2D, GLEnum.TextureMinFilter, (int)GLEnum.Linear);
             SharedAPI.GL.TexParameter(GLEnum.Texture2D, GLEnum.TextureMagFilter, (int)GLEnum.Linear);
@@ -716,8 +716,7 @@ internal static class ImGuiImplOpenGL
         {
             // Update selected blocks. We only ever write to textures regions which have never been used before!
             // This backend choose to use tex->Updates[] but you can use tex->UpdateRect to upload a single region.
-            int last_texture = 0;
-            SharedAPI.GL.GetInteger(GLEnum.TextureBinding2D, &last_texture);
+            SharedAPI.GL.GetInteger(GLEnum.TextureBinding2D, out int last_texture);
 
             uint gl_tex_id = (uint)tex->TexID;
             SharedAPI.GL.BindTexture(GLEnum.Texture2D, gl_tex_id);
@@ -764,10 +763,8 @@ internal static class ImGuiImplOpenGL
     private unsafe static bool CheckShader(uint handle, string desc)
     {
         Data* bd = GetBackendData();
-        int status = 0;
-        int log_length = 0;
-        SharedAPI.GL.GetShader(handle, GLEnum.CompileStatus, &status);
-        SharedAPI.GL.GetShader(handle, GLEnum.InfoLogLength, &log_length);
+        SharedAPI.GL.GetShader(handle, GLEnum.CompileStatus, out int status);
+        SharedAPI.GL.GetShader(handle, GLEnum.InfoLogLength, out int log_length);
         if (status == 0)
         {
             Log.Error($"ERROR: ImGui_ImplOpenGL3_CreateDeviceObjects: failed to compile {desc}! With GLSL: {_glslVersion}");
@@ -786,9 +783,8 @@ internal static class ImGuiImplOpenGL
     private unsafe static bool CheckProgram(uint handle, string desc)
     {
         Data* bd = GetBackendData();
-        int status = 0, log_length = 0;
-        SharedAPI.GL.GetProgram(handle, GLEnum.LinkStatus, &status);
-        SharedAPI.GL.GetProgram(handle, GLEnum.InfoLogLength, &log_length);
+        SharedAPI.GL.GetProgram(handle, GLEnum.LinkStatus, out int status);
+        SharedAPI.GL.GetProgram(handle, GLEnum.InfoLogLength, out int log_length);
         if (status == 0)
         {
             Log.Error($"ERROR: ImGui_ImplOpenGL3_CreateDeviceObjects: failed to link {desc}! With GLSL {_glslVersion}");
