@@ -249,7 +249,7 @@ internal static class ImGuiImplOpenGL
             _useVertexArray = !_glProfileIsES2;
             _hasExtensionsEnum = !_glProfileIsES2 && !_glProfileIsES3;
             _mayHavePolygonMode = !_glProfileIsES2 && !_glProfileIsES3;
-            _mayHaveBindBufferPixelUnpack = !_glProfileIsES2;
+            _mayHaveBindBufferPixelUnpack = !_glProfileIsES2 && _glVersion >= 210;
             _mayHavePrimitiveRestart = !_glProfileIsES2 && !_glProfileIsES3 && _glVersion >= 310;
             _mayHaveVtxOffset = !_glProfileIsES2 && !_glProfileIsES3 && _glVersion >= 320;
             _mayHaveBindSampler = !_glProfileIsES2 && (_glProfileIsES3 || _glVersion >= 330);
@@ -328,7 +328,7 @@ internal static class ImGuiImplOpenGL
             _isInitialized = true;
         }
 
-        if (_mayHaveVtxOffset && _glVersion >= 320)
+        if (_mayHaveVtxOffset)
             io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
         io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;       // We can honor ImGuiPlatformIO::Textures[] requests during render.
 
@@ -379,7 +379,7 @@ internal static class ImGuiImplOpenGL
         SharedAPI.GL.Disable(GLEnum.DepthTest);
         SharedAPI.GL.Disable(GLEnum.StencilTest);
         SharedAPI.GL.Enable(GLEnum.ScissorTest);
-        if (_mayHavePrimitiveRestart && !_glProfileIsES3 && _glVersion >= 310)
+        if (_mayHavePrimitiveRestart)
             SharedAPI.GL.Disable(GLEnum.PrimitiveRestart);
         if (_mayHavePolygonMode)
             SharedAPI.GL.PolygonMode(GLEnum.FrontAndBack, GLEnum.Fill);
@@ -593,7 +593,7 @@ internal static class ImGuiImplOpenGL
                     SharedAPI.GL.BindTexture(GLEnum.Texture2D, (uint)pcmd->GetTexID());
                     GLEnum indexType = sizeof(ImDrawIdx) == 2 ? GLEnum.UnsignedShort : GLEnum.UnsignedInt;
                     void* index_offset = (void*)(nint)(pcmd->IdxOffset * sizeof(ImDrawIdx));
-                    if (_mayHaveVtxOffset && _glVersion >= 320)
+                    if (_mayHaveVtxOffset)
                         SharedAPI.GL.DrawElementsBaseVertex(GLEnum.Triangles, (uint)pcmd->ElemCount, indexType, index_offset, (int)pcmd->VtxOffset);
                     else
                         SharedAPI.GL.DrawElements(GLEnum.Triangles, (uint)pcmd->ElemCount, indexType, index_offset);
@@ -630,7 +630,7 @@ internal static class ImGuiImplOpenGL
         if (last_enable_depth_test) SharedAPI.GL.Enable(GLEnum.DepthTest); else SharedAPI.GL.Disable(GLEnum.DepthTest);
         if (last_enable_stencil_test) SharedAPI.GL.Enable(GLEnum.StencilTest); else SharedAPI.GL.Disable(GLEnum.StencilTest);
         if (last_enable_scissor_test) SharedAPI.GL.Enable(GLEnum.ScissorTest); else SharedAPI.GL.Disable(GLEnum.ScissorTest);
-        if (_mayHavePrimitiveRestart && !_glProfileIsES3 && _glVersion >= 310)
+        if (_mayHavePrimitiveRestart)
         {
             if (last_enable_primitive_restart)
                 SharedAPI.GL.Enable(GLEnum.PrimitiveRestart);
@@ -811,7 +811,7 @@ internal static class ImGuiImplOpenGL
         SharedAPI.GL.GetInteger(GLEnum.TextureBinding2D, out int last_texture);
         SharedAPI.GL.GetInteger(GLEnum.ArrayBufferBinding, out int last_array_buffer);
         int last_pixel_unpack_buffer = 0;
-        if (_mayHaveBindBufferPixelUnpack && _glVersion >= 210)
+        if (_mayHaveBindBufferPixelUnpack)
         {
             SharedAPI.GL.GetInteger(GLEnum.PixelUnpackBufferBinding, out last_pixel_unpack_buffer);
             SharedAPI.GL.BindBuffer(GLEnum.PixelUnpackBuffer, 0);
@@ -893,7 +893,7 @@ internal static class ImGuiImplOpenGL
         // Restore modified GL state
         SharedAPI.GL.BindTexture(GLEnum.Texture2D, (uint)last_texture);
         SharedAPI.GL.BindBuffer(GLEnum.ArrayBuffer, (uint)last_array_buffer);
-        if (_mayHaveBindBufferPixelUnpack && _glVersion >= 210)
+        if (_mayHaveBindBufferPixelUnpack)
             SharedAPI.GL.BindBuffer(GLEnum.PixelUnpackBuffer, (uint)last_pixel_unpack_buffer);
         if (_useVertexArray)
             SharedAPI.GL.BindVertexArray((uint)last_vertex_array);
