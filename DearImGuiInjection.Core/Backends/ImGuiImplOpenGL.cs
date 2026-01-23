@@ -290,7 +290,7 @@ internal static class ImGuiImplOpenGL
 
             // Detect extensions we support
             _hasClipOrigin = _glVersion >= 450;
-            if (_hasExtensionsEnum)
+            if (!_hasClipOrigin && _hasExtensionsEnum)
             {
                 SharedAPI.GL.GetInteger(GLEnum.NumExtensions, out int num_extensions);
                 for (uint i = 0; i < num_extensions; i++)
