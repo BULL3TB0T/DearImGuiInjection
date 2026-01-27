@@ -40,15 +40,10 @@ public static class DearImGuiInjectionCore
 
     private static float DPIScale = -1;
 
-    internal static bool Init(ILoader loader, int graphicsDeviceType, string graphicsDeviceTypeName, bool isOnWindows)
+    internal static bool Init(ILoader loader, int graphicsDeviceType, string graphicsDeviceTypeName)
     {
         Loader = loader;
         Log.Init(Loader);
-        if (!isOnWindows)
-        {
-            Log.Error("Unsupported OS: Windows required.");
-            return false;
-        }
         ConfigPath = Path.Combine(Loader.ConfigPath, "DearImGuiInjection");
         AssemblyPath = Loader.AssemblyPath;
         AssetsPath = Path.Combine(AssemblyPath, "Assets");
@@ -115,6 +110,7 @@ public static class DearImGuiInjectionCore
             renderer.Dispose();
             return false;
         }
+        MultiContextCompositor = new();
         Loader.CreateConfig(ref ShowDemoWindow, "General", "Show Demo Window", false,
             "Displays the built-in Dear ImGui demo window, useful for testing and debugging the UI.");
         Loader.CreateConfig(ref EnableDpiAwareness, "General", "Enable DPI Awareness", false,
@@ -126,7 +122,6 @@ public static class DearImGuiInjectionCore
         Loader.SaveConfig();
         if (EnableDpiAwareness.GetValue())
             DPIScale = ImGuiImplWin32.GetDpiScaleForMonitor(User32.MonitorFromPoint(new POINT(0, 0), MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY));
-        MultiContextCompositor = new();
         if (ShowDemoWindow.GetValue())
             CreateModule("DearImGuiInjection").OnRender = ImGui.ShowDemoWindow;
         return true;

@@ -22,7 +22,7 @@ internal class DearImGuiInjectionBepInExI2LCPP : BasePlugin, ILoader
     public override void Load()
     {
         GraphicsDeviceType graphicsDeviceType = SystemInfo.graphicsDeviceType;
-        if (!DearImGuiInjectionCore.Init(this, (int)graphicsDeviceType, graphicsDeviceType.ToString(), Application.platform == RuntimePlatform.WindowsPlayer))
+        if (!DearImGuiInjectionCore.Init(this, (int)graphicsDeviceType, graphicsDeviceType.ToString()))
             return;
         AddComponent<UnityMainThreadDispatcher>();
     }

@@ -688,7 +688,7 @@ internal static class ImGuiImplOpenGL
         if (tex->Status == ImTextureStatus.WantCreate)
         {
             // Create and upload new texture to graphics system
-            //Log.Debug(string.Format("UpdateTexture #%03d: WantCreate %dx%d\n", tex->UniqueID, tex->Width, tex->Height));
+            Log.Info(string.Format("UpdateTexture #{0:000}: WantCreate {1}x{2}", tex->UniqueID, tex->Width, tex->Height));
             if (!tex->TexID.IsNull || tex->BackendUserData != null)
                 throw new InvalidOperationException("Expected TexID to be null and BackendUserData to be null.");
             if (tex->Format != ImTextureFormat.Rgba32)
